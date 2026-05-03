@@ -3,7 +3,7 @@
             const group = new THREE.Group();
             const img = new Image();
             img.crossOrigin = "Anonymous";
-            img.src = skinDataURL || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABAAQMAAACQp+OdAAAABlBMVEUAAAAAAAClZ7nPAAAAAXRSTlMAQObYZgAAACdJREFUeNpjYBgFo2AUjIJRMApGwSgYBaNgFIyCUTAKRsEoGAVDAgAEcAABXjOSGwAAAABJRU5ErkJggg==';
+            img.src = skinDataURL || 'textures/steve.png';
             img.onload = () => {
                 function getTex(x, y, tw, th) {
                     const c = document.createElement('canvas'); c.width = tw; c.height = th;

@@ -105,23 +105,25 @@
                             const blockDef = ITEMS[blockType]; 
                             const heldItem = invState.hotbar[currentSlotIndex]; 
                             const toolDef = heldItem ? ITEMS[heldItem.type] : null; 
-                            let miningPower = 1; 
-                            if (toolDef && toolDef.toolType === blockDef.tool) miningPower = toolDef.power; 
+                            let miningPower = 1; if (toolDef && toolDef.toolType === blockDef.tool) miningPower = toolDef.power; 
                             const requiredTime = gameMode === 0 ? 0.05 : blockDef.hardness / miningPower; 
                             miningTime += delta; 
-                            let progress = Math.min(miningTime / requiredTime, 1);
-                            highlightBox.scale.setScalar(1 + 0.1 * progress);
+                            let progress = Math.min(miningTime / requiredTime, 1); 
+                            highlightBox.scale.setScalar(1 + progress * 0.15); 
+                            miningOverlay.position.set(bx + 0.5, by + 0.5, bz + 0.5);
+                            miningOverlay.visible = true;
+                            const stage = Math.floor(progress * 9.9);
+                            miningOverlay.material = destroyStages[stage];
                             if (miningTime >= requiredTime) { 
-                                let drops = false; 
-                                if (blockDef.tool === 'none' || (toolDef && toolDef.toolType === blockDef.tool && toolDef.tier >= blockDef.tier)) drops = true; 
+                                let drops = false; if (blockDef.tool === 'none' || (toolDef && toolDef.toolType === blockDef.tool && toolDef.tier >= blockDef.tier)) drops = true; 
                                 setBlock(bx, by, bz, null); 
-                                if (blockType === 'bed_head' || blockType === 'bed_foot') { const targetType = blockType === 'bed_head' ? 'bed_foot' : 'bed_head'; const dirs = [[1,0], [-1,0], [0,1], [0,-1]]; for (let d of dirs) { if (getBlock(bx + d[0], by, bz + d[1]) === targetType) { setBlock(bx + d[0], by, bz + d[1], null); break; } } } 
-                                highlightBox.visible = false; highlightBox.scale.setScalar(1); 
+                                if (blockType === 'bed_head' || blockType === 'bed_foot') { const targetType = blockType === 'bed_head' ? 'bed_foot' : 'bed_head'; const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]; for (let d of dirs) { if (getBlock(bx + d[0], by, bz + d[1]) === targetType) { setBlock(bx + d[0], by, bz + d[1], null); break; } } }
+                                highlightBox.visible = false; miningOverlay.visible = false; highlightBox.scale.setScalar(1); 
                                 if (drops && gameMode === 1) { if (blockType === 'bed_head' || blockType === 'bed_foot') { addBlockToInventory('bed'); } else addBlockToInventory(blockType); } 
                                 renderInventoryUI(); isMining = false; miningTime = 0; targetBlockKey = null; 
                             } 
                         } 
-                    } else { targetBlockKey = key; miningTime = 0; highlightBox.scale.setScalar(1); }
+                    } else { targetBlockKey = key; miningTime = 0; highlightBox.scale.setScalar(1); miningOverlay.visible = false; }
                 } else { highlightBox.visible = false; highlightBox.scale.setScalar(1); targetBlockKey = null; miningTime = 0; }
             } else { highlightBox.visible = false; }
 

@@ -2,6 +2,12 @@
         const itemPixels = {};
 
         const textureLoader = new THREE.TextureLoader();
+        const destroyStages = [];
+        for (let i = 0; i <= 9; i++) {
+            const t = textureLoader.load('textures/destroy_stage_' + i + '.png');
+            t.magFilter = THREE.NearestFilter;
+            destroyStages.push(new THREE.MeshBasicMaterial({ map: t, transparent: true, alphaTest: 0.1, polygonOffset: true, polygonOffsetFactor: -1 }));
+        }
         function createPixelTexture(type) {
             const path = 'textures/' + type + '.png';
             const texture = textureLoader.load(path, (tex) => {

@@ -3,9 +3,36 @@
         const particles = [];
         function spawnParticle(pos, colorHex) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), new THREE.MeshBasicMaterial({ color: colorHex })); p.position.copy(pos); scene.add(p); particles.push({ mesh: p, life: 1.0, vel: new THREE.Vector3((Math.random() - 0.5) * 15, Math.random() * 15, (Math.random() - 0.5) * 15) }); }
 
-        const zHeadMatBase = new THREE.MeshLambertMaterial({ color: 0x3b8526 });
-        const zBodyMatBase = new THREE.MeshLambertMaterial({ color: 0x00aaff });
-        const zLegMatBase = new THREE.MeshLambertMaterial({ color: 0x4a2a75 });
+        const mobTexLoader = new THREE.TextureLoader();
+        const mobTexs = {};
+        ['zombie', 'pig', 'spider', 'enderman', 'blaze', 'dragon', 'end_crystal'].forEach(m => {
+            mobTexs[m] = mobTexLoader.load('textures/' + m + '.png');
+            mobTexs[m].magFilter = THREE.NearestFilter;
+            mobTexs[m].colorSpace = THREE.SRGBColorSpace;
+        });
+
+        function getMobPartMats(mob, ox, oy, w, h, d, tw = 64, th = 32) {
+            const tex = mobTexs[mob];
+            const img = tex ? tex.image : null;
+            function getFace(x, y, fw, fh) {
+                if (!img || !img.complete || img.width === 0) return new THREE.MeshLambertMaterial({ color: 0xffffff });
+                const c = document.createElement('canvas'); c.width = fw; c.height = fh;
+                const ctx = c.getContext('2d');
+                ctx.drawImage(img, x, y, fw, fh, 0, 0, fw, fh);
+                const t = new THREE.CanvasTexture(c);
+                t.magFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace;
+                return new THREE.MeshLambertMaterial({ map: t, transparent: true, alphaTest: 0.1 });
+            }
+            return [
+                getFace(ox, oy + d, d, h),             // +x (Right)
+                getFace(ox + d + w, oy + d, d, h),     // -x (Left)
+                getFace(ox + d, oy, w, d),             // +y (Top)
+                getFace(ox + d + w, oy, w, d),         // -y (Bottom)
+                getFace(ox + d, oy + d, w, h),         // +z (Front)
+                getFace(ox + d + w + d, oy + d, w, h) // -z (Back)
+            ];
+        }
+
         const zLegGeo = new THREE.BoxGeometry(0.25, 0.75, 0.25); zLegGeo.translate(0, -0.375, 0);
 
         function spawnEnderEyeEntity(x, y, z) {
@@ -98,18 +125,20 @@
         }
 
         function spawnPig(x, z, y) {
-            const pMat = new THREE.MeshLambertMaterial({ color: 0xffb6c1 }); const sMat = new THREE.MeshLambertMaterial({ color: 0xff8899 });
-            const pigGroup = new THREE.Group();
-            const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 1.2), pMat); body.position.y = 0.5; pigGroup.add(body);
-            const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), pMat); head.position.set(0, 0.8, 0.7); pigGroup.add(head);
-            const snout = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), sMat); snout.position.set(0, 0.7, 1.05); pigGroup.add(snout);
+            const pGroup = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 1.2), getMobPartMats('pig', 28, 8, 10, 16, 8)); body.position.y = 0.5; pGroup.add(body);
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), getMobPartMats('pig', 0, 0, 8, 8, 8)); head.position.set(0, 0.8, 0.7); pGroup.add(head);
+            const snout = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.1), getMobPartMats('pig', 10, 12, 4, 3, 1)); snout.position.set(0, 0.7, 1.0); pGroup.add(snout);
+            const nostrilMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+            const nostrilL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.02), nostrilMat); nostrilL.position.set(0.06, 0.7, 1.06); pGroup.add(nostrilL);
+            const nostrilR = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.02), nostrilMat); nostrilR.position.set(-0.06, 0.7, 1.06); pGroup.add(nostrilR);
             const legPos = [[-0.3, 0.2, 0.4], [0.3, 0.2, 0.4], [-0.3, 0.2, -0.4], [0.3, 0.2, -0.4]]; const legs = [];
             const legGeo = new THREE.BoxGeometry(0.2, 0.4, 0.2); legGeo.translate(0, -0.2, 0);
-            legPos.forEach(pos => { const leg = new THREE.Mesh(legGeo, pMat); leg.position.set(...pos); pigGroup.add(leg); legs.push(leg); });
-            pigGroup.position.set(x, y + 2, z); scene.add(pigGroup);
+            legPos.forEach(pos => { const leg = new THREE.Mesh(legGeo, getMobPartMats('pig', 0, 16, 4, 6, 4)); leg.position.set(...pos); pGroup.add(leg); legs.push(leg); });
+            pGroup.position.set(x, y + 2, z); scene.add(pGroup);
 
             entities.push({
-                type: 'pig', mesh: pigGroup, hp: 10, legs: legs, state: 'idle', timer: 0, velocity: new THREE.Vector3(), target: new THREE.Vector3(),
+                type: 'pig', mesh: pGroup, hp: 10, legs: legs, state: 'idle', timer: 0, velocity: new THREE.Vector3(), target: new THREE.Vector3(),
                 update: function (delta, time) {
                     if (this.hp <= 0) { addBlockToInventory('raw_porkchop', 1); renderInventoryUI(); return true; }
                     this.timer -= delta;
@@ -122,14 +151,13 @@
                         if (dir.length() > 0.1) {
                             dir.normalize(); const stepX = dir.x * 1.5 * delta; const stepZ = dir.z * 1.5 * delta;
                             const px = this.mesh.position.x; const py = this.mesh.position.y; const pz = this.mesh.position.z;
-                            if (!checkCollisionGeneric(px + stepX, py - 0.2, pz, 0.3, 0.5)) this.mesh.position.x += stepX; else { this.timer = 0; if (this.velocity.y === 0) this.velocity.y = 6; }
-                            if (!checkCollisionGeneric(px, py - 0.2, pz + stepZ, 0.3, 0.5)) this.mesh.position.z += stepZ; else { this.timer = 0; if (this.velocity.y === 0) this.velocity.y = 6; }
+                            if (!checkCollisionGeneric(px + stepX, py - 0.2, pz, 0.4, 0.8)) this.mesh.position.x += stepX; else { this.timer = 0; if (this.velocity.y === 0) this.velocity.y = 6; }
+                            if (!checkCollisionGeneric(px, py - 0.2, pz + stepZ, 0.4, 0.8)) this.mesh.position.z += stepZ; else { this.timer = 0; if (this.velocity.y === 0) this.velocity.y = 6; }
                             const ls = Math.sin(time * 15) * 0.5; this.legs[0].rotation.x = ls; this.legs[1].rotation.x = -ls; this.legs[2].rotation.x = -ls; this.legs[3].rotation.x = ls;
                         }
                     } else { this.legs.forEach(leg => leg.rotation.x = 0); }
-
                     this.velocity.y -= 25.0 * delta; this.mesh.position.y += this.velocity.y * delta;
-                    if (checkCollisionGeneric(this.mesh.position.x, this.mesh.position.y - 0.2, this.mesh.position.z, 0.3, 0.1)) { this.mesh.position.y = Math.floor(this.mesh.position.y - 0.2) + 1 + 0.2; this.velocity.y = 0; }
+                    if (checkCollisionGeneric(this.mesh.position.x, this.mesh.position.y - 0.2, this.mesh.position.z, 0.4, 0.1)) { this.mesh.position.y = Math.floor(this.mesh.position.y - 0.2) + 1 + 0.2; this.velocity.y = 0; }
                     this.mesh.children.forEach(c => { if (c.material && c.material.emissive && c.material.emissive.r > 0) { c.material.emissive.r = Math.max(0, c.material.emissive.r - delta * 10); c.material.emissive.g = Math.max(0, c.material.emissive.g - delta * 10); c.material.emissive.b = Math.max(0, c.material.emissive.b - delta * 10); } });
                     return false;
                 }
@@ -137,15 +165,17 @@
         }
 
         function spawnZombie(x, z, y) {
-            const zhm = zHeadMatBase.clone(); const zbm = zBodyMatBase.clone(); const zlm = zLegMatBase.clone();
             const zGroup = new THREE.Group();
-            const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), zhm); head.position.y = 1.6; zGroup.add(head);
-            const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.75, 0.25), zbm); body.position.y = 1.0; zGroup.add(body);
-            const armL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.2), zhm); armL.position.set(0.35, 1.2, 0.2); armL.rotation.x = Math.PI / 2; zGroup.add(armL);
-            const armR = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.2), zhm); armR.position.set(-0.35, 1.2, 0.2); armR.rotation.x = Math.PI / 2; zGroup.add(armR);
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), getMobPartMats('zombie', 0, 0, 8, 8, 8)); head.position.y = 1.6; zGroup.add(head);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+            const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.06, 0.05), eyeMat); eyeL.position.set(0.12, 1.65, 0.26); zGroup.add(eyeL);
+            const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.06, 0.05), eyeMat); eyeR.position.set(-0.12, 1.65, 0.26); zGroup.add(eyeR);
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.75, 0.25), getMobPartMats('zombie', 16, 16, 8, 12, 4)); body.position.y = 1.0; zGroup.add(body);
+            const armL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.2), getMobPartMats('zombie', 40, 16, 4, 12, 4)); armL.position.set(0.35, 1.2, 0.2); armL.rotation.x = Math.PI / 2; zGroup.add(armL);
+            const armR = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.2), getMobPartMats('zombie', 40, 16, 4, 12, 4)); armR.position.set(-0.35, 1.2, 0.2); armR.rotation.x = Math.PI / 2; zGroup.add(armR);
             const legs = [];
-            const legL = new THREE.Mesh(zLegGeo, zlm); legL.position.set(0.15, 0.6, 0); zGroup.add(legL); legs.push(legL);
-            const legR = new THREE.Mesh(zLegGeo, zlm); legR.position.set(-0.15, 0.6, 0); zGroup.add(legR); legs.push(legR);
+            const legL = new THREE.Mesh(zLegGeo, getMobPartMats('zombie', 0, 16, 4, 12, 4)); legL.position.set(0.15, 0.6, 0); zGroup.add(legL); legs.push(legL);
+            const legR = new THREE.Mesh(zLegGeo, getMobPartMats('zombie', 0, 16, 4, 12, 4)); legR.position.set(-0.15, 0.6, 0); zGroup.add(legR); legs.push(legR);
 
             zGroup.position.set(x, y + 2, z); scene.add(zGroup);
             entities.push({
@@ -180,15 +210,14 @@
         }
 
         function spawnSpider(x, z, y) {
-            const bMat = new THREE.MeshLambertMaterial({ color: 0x221111 }); const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
             const spGroup = new THREE.Group();
-            const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.3, 0.9), bMat); body.position.y = 0.2; spGroup.add(body);
-            const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.3, 0.45), bMat); head.position.set(0, 0.2, 0.6); spGroup.add(head);
-            const eye1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), eyeMat); eye1.position.set(0.12, 0.25, 0.85); spGroup.add(eye1);
-            const eye2 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), eyeMat); eye2.position.set(-0.12, 0.25, 0.85); spGroup.add(eye2);
-
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.3, 0.9), getMobPartMats('spider', 0, 0, 10, 8, 12)); body.position.y = 0.2; spGroup.add(body);
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.3, 0.45), getMobPartMats('spider', 32, 4, 8, 8, 8)); head.position.set(0, 0.2, 0.6); spGroup.add(head);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), eyeMat); eyeL.position.set(0.12, 0.25, 0.82); spGroup.add(eyeL);
+            const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), eyeMat); eyeR.position.set(-0.12, 0.25, 0.82); spGroup.add(eyeR);
             const legs = [];
-            for (let i = 0; i < 8; i++) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.6, 0.08), bMat); spGroup.add(leg); legs.push(leg); }
+            for (let i = 0; i < 8; i++) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.6, 0.08), getMobPartMats('spider', 0, 0, 2, 2, 8)); spGroup.add(leg); legs.push(leg); }
 
             spGroup.position.set(x, y + 1, z); scene.add(spGroup);
             entities.push({
@@ -233,10 +262,10 @@
         }
 
         function spawnBlaze(x, z, y) {
-            const bMat = new THREE.MeshLambertMaterial({ color: 0xffaa00 }); const bGroup = new THREE.Group();
-            const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), bMat); head.position.y = 1.8; bGroup.add(head);
+            const bGroup = new THREE.Group();
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), getMobPartMats('blaze', 0, 0, 8, 8, 8)); head.position.y = 1.8; bGroup.add(head);
             const rods = [];
-            for (let i = 0; i < 8; i++) { const rod = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.1), bMat); bGroup.add(rod); rods.push(rod); }
+            for (let i = 0; i < 8; i++) { const rod = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.1), getMobPartMats('blaze', 0, 16, 2, 8, 2)); bGroup.add(rod); rods.push(rod); }
             bGroup.position.set(x, y + 2, z); scene.add(bGroup);
             entities.push({
                 type: 'blaze', mesh: bGroup, rods: rods, hp: 20, velocity: new THREE.Vector3(), targetY: y + 2,
@@ -265,18 +294,19 @@
         }
 
         function spawnEnderman(x, z, y) {
-            const eMat = new THREE.MeshLambertMaterial({ color: 0x111111 }); const eyeMat = new THREE.MeshBasicMaterial({ color: 0xcc00ff });
             const eGroup = new THREE.Group();
-            const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.2, 0.3), eMat); body.position.y = 1.6; eGroup.add(body);
-            const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), eMat); head.position.y = 2.45; eGroup.add(head);
-            const eyes = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.1, 0.52), eyeMat); eyes.position.y = 2.45; eGroup.add(eyes);
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.2, 0.3), getMobPartMats('enderman', 32, 16, 8, 12, 4)); body.position.y = 1.6; eGroup.add(body);
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), getMobPartMats('enderman', 0, 0, 8, 8, 8)); head.position.y = 2.45; eGroup.add(head);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff00ff });
+            const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.05, 0.05), eyeMat); eyeL.position.set(0.12, 2.5, 0.26); eGroup.add(eyeL);
+            const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.05, 0.05), eyeMat); eyeR.position.set(-0.12, 2.5, 0.26); eGroup.add(eyeR);
             const armGeo = new THREE.BoxGeometry(0.15, 1.5, 0.15); armGeo.translate(0, -0.75, 0);
-            const armL = new THREE.Mesh(armGeo, eMat); armL.position.set(0.35, 2.1, 0); eGroup.add(armL);
-            const armR = new THREE.Mesh(armGeo, eMat); armR.position.set(-0.35, 2.1, 0); eGroup.add(armR);
+            const armL = new THREE.Mesh(armGeo, getMobPartMats('enderman', 56, 0, 2, 30, 2)); armL.position.set(0.35, 2.1, 0); eGroup.add(armL);
+            const armR = new THREE.Mesh(armGeo, getMobPartMats('enderman', 56, 0, 2, 30, 2)); armR.position.set(-0.35, 2.1, 0); eGroup.add(armR);
             const legGeo = new THREE.BoxGeometry(0.15, 1.5, 0.15); legGeo.translate(0, -0.75, 0);
             const legs = [];
-            const legL = new THREE.Mesh(legGeo, eMat); legL.position.set(0.15, 1.0, 0); eGroup.add(legL); legs.push(legL);
-            const legR = new THREE.Mesh(legGeo, eMat); legR.position.set(-0.15, 1.0, 0); eGroup.add(legR); legs.push(legR);
+            const legL = new THREE.Mesh(legGeo, getMobPartMats('enderman', 56, 0, 2, 30, 2)); legL.position.set(0.15, 1.0, 0); eGroup.add(legL); legs.push(legL);
+            const legR = new THREE.Mesh(legGeo, getMobPartMats('enderman', 56, 0, 2, 30, 2)); legR.position.set(-0.15, 1.0, 0); eGroup.add(legR); legs.push(legR);
 
             eGroup.position.set(x, y + 2, z); scene.add(eGroup);
             entities.push({
@@ -324,7 +354,7 @@
 
         function spawnEnderCrystal(x, y, z) {
             const cGroup = new THREE.Group();
-            const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.8, 0), new THREE.MeshBasicMaterial({ color: 0xff55ff, wireframe: true }));
+            const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.8, 0), new THREE.MeshBasicMaterial({ map: mobTexs['end_crystal'], transparent: true }));
             crystal.position.y = 1; cGroup.add(crystal);
             const core = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), new THREE.MeshLambertMaterial({ color: 0x550055 }));
             core.position.y = 1; cGroup.add(core); cGroup.position.set(x, y, z); scene.add(cGroup);
