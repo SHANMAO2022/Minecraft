@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Split Version</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+    <div id="crosshair"></div>
+    <div id="dragged-icon"></div>
+    <div id="hand-item"></div>
+    <div id="portal-overlay"></div>
+    <div id="item-tooltip"></div>
+
+    <div id="debug-ui">
+        <div id="fps-display" class="debug-line">FPS: 计算中...</div>
+        <div id="coords-display" class="debug-line">XYZ: 0.0 / 0.0 / 0.0</div>
+        <div id="biome-display" class="debug-line">Biome: Overworld</div>
+        <div id="time-display" class="debug-line">离黑夜: 计算中...</div>
+        <div id="gamemode-display" class="debug-line">模式: 生存 [按 T 输入指令]</div>
+    </div>
+
+    <div id="chat-container">
+        <div id="chat-history"></div><input type="text" id="chat-input" placeholder="输入指令 (如 /summon pig) 或聊天内容..."
+            autocomplete="off">
+    </div>
+
+    <div id="boss-bar-container">
+        <div id="boss-name">Ender Dragon</div>
+        <div id="boss-bar-bg">
+            <div id="boss-bar-fill"></div>
+        </div>
+    </div>
+
+    <div id="status-bars">
+        <div id="health-bar">❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️</div>
+        <div id="hunger-bar">🍗🍗🍗🍗🍗🍗🍗🍗🍗🍗</div>
+    </div>
+
+    <div id="death-screen">
+        <h1>你死了！</h1>
+        <button id="respawn-btn">重生</button>
+    </div>
+
+    <div id="win-screen">
+        <div class="credits-text" id="credits-content">
+            <span class="win-title">Game Clear！恭喜通关！</span>
+            感谢游玩！
+            made by SHANMAO2022
+            更多作品请点击链接查看
+            <a href="https://www.bilibili.com/video/BV1UT42167xb?vd_source=de44f7cfeb3a11503591e445d6f7bfdc"
+                target="_blank"
+                style="text-decoration: none; font-size: 48px; cursor: pointer; pointer-events: auto; display: inline-block;">🔗</a>
+
+            (按 ESC 或 空格键 跳过并坠落回主世界)
+        </div>
+    </div>
+
+    <div id="inventory-ui">
+        <div class="inventory-top">
+            <div class="crafting-area">
+                <div>
+                    <div class="inv-section-title" id="crafting-title">合成 (2x2)</div>
+                    <div class="crafting-grid size-2" id="crafting-grid">
+                        <div class="slot" data-container="crafting" data-index="0"></div>
+                        <div class="slot" data-container="crafting" data-index="1"></div>
+                        <div class="slot" data-container="crafting" data-index="2" style="display:none;"></div>
+                        <div class="slot" data-container="crafting" data-index="3"></div>
+                        <div class="slot" data-container="crafting" data-index="4"></div>
+                        <div class="slot" data-container="crafting" data-index="5" style="display:none;"></div>
+                        <div class="slot" data-container="crafting" data-index="6" style="display:none;"></div>
+                        <div class="slot" data-container="crafting" data-index="7" style="display:none;"></div>
+                        <div class="slot" data-container="crafting" data-index="8" style="display:none;"></div>
+                    </div>
+                </div>
+                <div class="crafting-arrow">➜</div>
+                <div>
+                    <div class="inv-section-title">产出</div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div class="slot" id="crafting-output" data-container="output" data-index="0"></div>
+                        <div id="creative-toggle-btn" title="切换创造模式物品栏"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div>
+            <div class="inv-section-title">背包</div>
+            <div id="inventory-grid"></div>
+        </div>
+    </div>
+
+    <div id="hotbar"></div>
+
+    <div id="ui-layer">
+        <div id="title-screen">
+            <div class="mc-logo">MINECRAFT<span>JAVA EDITION</span>
+                <div class="mc-splash">Vanilla!</div>
+            </div>
+            <div class="mc-button" id="btn-singleplayer">单人游戏</div>
+            <div class="mc-button" id="btn-multiplayer">多人游戏</div>
+            <div class="mc-button disabled" onclick="alert('敬请期待')">Minecraft Realms</div>
+            <div class="mc-row">
+                <div class="mc-button" id="btn-options-title">选项...</div>
+                <div class="mc-button disabled" onclick="alert('网页版无法直接退出游戏窗口')">退出游戏</div>
+            </div>
+        </div>
+
+        <div id="world-select-screen">
+            <div class="mc-menu-title">选择世界</div>
+            <div
+                style="width: 400px; height: 35px; border: 2px solid #fff; background: #000; margin-bottom: 10px; color: #fff; line-height: 35px; padding: 0 10px; font-family: monospace; box-sizing: border-box;">
+                _</div>
+            <div id="world-list-container"></div>
+            <div class="mc-row">
+                <div class="mc-button disabled" id="btn-play-world">进入选中的世界</div>
+                <div class="mc-button" id="btn-goto-create">创建新的世界</div>
+            </div>
+            <div class="mc-row-4">
+                <div class="mc-button disabled" onclick="alert('敬请期待')">编辑</div>
+                <div class="mc-button disabled" id="btn-delete-world">删除</div>
+                <div class="mc-button disabled" onclick="alert('敬请期待')">重建</div>
+                <div class="mc-button" id="btn-world-back">返回</div>
+            </div>
+        </div>
+
+        <div id="create-world-screen">
+            <div class="mc-menu-title">创建新的世界</div>
+            <div style="width: 400px; text-align: left; color: #a0a0a0; font-size: 14px;">世界种子 (留空则随机)</div>
+            <input type="text" id="seed-input" class="mc-input" placeholder="例如: 114514 或 hello">
+            <div class="mc-button" id="btn-toggle-mode">游戏模式: 生存</div>
+            <div style="width: 400px; text-align: left; color: #a0a0a0; font-size: 12px; margin-bottom: 20px;">
+                生存：搜寻资源、制造物品、提升等级、补充体力和生命值。<br>
+                创造：创造模式下你的物品栏拥有无限的资源、可自由飞翔（双击空格）。
+            </div>
+            <div class="mc-row" style="margin-top: 10px;">
+                <div class="mc-button" id="btn-confirm-create">创建新的世界</div>
+                <div class="mc-button" id="btn-cancel-create">取消</div>
+            </div>
+        </div>
+
+        <div id="options-screen">
+            <div class="mc-menu-title">选项</div>
+            <div style="width: 400px; text-align: left; color: #a0a0a0; font-size: 14px;">玩家名字:</div>
+            <input type="text" id="player-name-input" class="mc-input" placeholder="输入名字" value="Player">
+            <div style="width: 400px; text-align: left; color: #a0a0a0; font-size: 14px;">自定义皮肤 (64x64 PNG):</div>
+            <input type="file" id="skin-upload" class="mc-button" accept="image/png"
+                style="line-height: normal; padding-top: 5px;">
+            <div class="mc-button" id="btn-save-options">完成</div>
+        </div>
+
+        <div id="multiplayer-screen">
+            <div class="mc-menu-title">多人联机</div>
+            <div class="mc-button" id="btn-host-game">创建房间 (作为房主)</div>
+            <div style="width: 400px; text-align: left; color: #a0a0a0; font-size: 14px; margin-top: 20px;">加入房间
+                (输入房主房间号):</div>
+            <input type="text" id="join-id-input" class="mc-input" placeholder="房间号">
+            <div class="mc-button" id="btn-join-game">加入游戏</div>
+            <div class="mc-button" id="btn-multiplayer-back" style="margin-top: 20px;">返回</div>
+        </div>
+
+        <div id="pause-screen">
+            <div class="mc-menu-title">游戏菜单</div>
+            <div class="mc-button" id="btn-resume">回到游戏</div>
+            <div class="mc-row">
+                <div class="mc-button disabled" onclick="alert('敬请期待')">进度</div>
+                <div class="mc-button disabled" onclick="alert('敬请期待')">统计信息</div>
+            </div>
+            <div class="mc-row">
+                <div class="mc-button disabled" onclick="alert('敬请期待')">提供反馈</div>
+                <div class="mc-button disabled" onclick="alert('敬请期待')">报告漏洞</div>
+            </div>
+            <div class="mc-row">
+                <div class="mc-button" id="btn-options-pause">选项...</div>
+                <div class="mc-button disabled" onclick="alert('敬请期待')">对局域网开放</div>
+            </div>
+            <div class="mc-button" id="btn-save-quit">保存并退回到标题屏幕</div>
+        </div>
+    </div>
+
+<script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+                "simplex-noise": "https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js"
+            }
+        }
+    </script>
+<script type="module">
+    // Import libraries and set them as globals, then load all game scripts in order
+    import * as THREE from 'three';
+    import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+    import { createNoise2D, createNoise3D } from 'simplex-noise';
+
+    window.THREE = THREE;
+    window.PointerLockControls = PointerLockControls;
+    window.createNoise2D = createNoise2D;
+    window.createNoise3D = createNoise3D;
+
+    // Load all game scripts sequentially after imports are ready
+    const scripts = [
+        'js/1_globals.js',
+        'js/2_items.js',
+        'js/3_scene.js',
+        'js/4_textures.js',
+        'js/5_ui_state.js',
+        'js/6_chat.js',
+        'js/7_inventory.js',
+        'js/8_models.js',
+        'js/9_entities.js',
+        'js/9_5_mob_spawning.js',
+        'js/10_world.js',
+        'js/11_save_menu.js',
+        'js/12_network.js',
+        'js/13_input.js',
+        'js/14_main_loop.js'
+    ];
+
+    for (const src of scripts) {
+        await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = resolve;
+            script.onerror = () => reject(new Error('Failed to load: ' + src));
+            document.body.appendChild(script);
+        });
+    }
+</script>
+</body>
+</html>

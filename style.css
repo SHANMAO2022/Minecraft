@@ -1,0 +1,702 @@
+body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            user-select: none;
+        }
+
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 5;
+            display: none;
+        }
+
+        #crosshair::before,
+        #crosshair::after {
+            content: '';
+            position: absolute;
+            background-color: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+        }
+
+        #crosshair::before {
+            top: 9px;
+            left: 0;
+            width: 20px;
+            height: 2px;
+        }
+
+        #crosshair::after {
+            top: 0;
+            left: 9px;
+            width: 2px;
+            height: 20px;
+        }
+
+        #debug-ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            pointer-events: none;
+            z-index: 10;
+            text-shadow: 1px 1px 0 #000;
+            font-family: monospace;
+            font-size: 14px;
+            display: none;
+        }
+
+        .debug-line {
+            margin: 2px 0;
+        }
+
+        #time-display {
+            color: #ffeb3b;
+            font-weight: bold;
+        }
+
+        #gamemode-display {
+            color: #00ffaa;
+            font-weight: bold;
+        }
+
+        #chat-container {
+            position: absolute;
+            bottom: 85px;
+            left: 10px;
+            width: 400px;
+            display: none;
+            z-index: 100;
+            font-family: sans-serif;
+        }
+
+        #chat-history {
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 5px;
+            text-shadow: 1px 1px 0 #000;
+            font-size: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        #chat-input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            border: 2px solid #555;
+            padding: 8px;
+            font-size: 16px;
+            outline: none;
+            box-sizing: border-box;
+            font-family: monospace;
+        }
+
+        #chat-input:focus {
+            border-color: #aaa;
+        }
+
+        /* 快捷栏 8px 间距 */
+        #hotbar {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: none;
+            gap: 8px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 6px;
+            border: 3px solid #444;
+            border-radius: 4px;
+            z-index: 5;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+            max-width: 90vw;
+            overflow-x: auto;
+        }
+
+        #hotbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .slot {
+            width: 48px;
+            height: 48px;
+            flex-shrink: 0;
+            border-top: 3px solid #373737;
+            border-left: 3px solid #373737;
+            border-bottom: 3px solid #fff;
+            border-right: 3px solid #fff;
+            background-color: #8b8b8b;
+            box-sizing: border-box;
+            background-size: 80%;
+            background-position: center;
+            background-repeat: no-repeat;
+            position: relative;
+            image-rendering: pixelated;
+        }
+
+        .slot:hover {
+            background-color: #a0a0a0;
+        }
+
+        .slot::before {
+            content: attr(data-key);
+            position: absolute;
+            top: 2px;
+            left: 4px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 10px;
+            font-weight: bold;
+        }
+
+        .slot::after {
+            content: attr(data-count);
+            position: absolute;
+            bottom: 2px;
+            right: 4px;
+            color: white;
+            font-size: 14px;
+            font-family: monospace;
+            font-weight: bold;
+            text-shadow: 2px 2px 0 #000;
+        }
+
+        .slot[data-count="0"]::after,
+        .slot[data-count="1"]::after {
+            display: none;
+        }
+
+        .slot.active {
+            border: 3px solid #fff;
+            transform: scale(1.1);
+            background-color: #a0a0a0;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            z-index: 2;
+        }
+
+        #inventory-ui {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #c6c6c6;
+            padding: 20px;
+            border: 4px solid #555;
+            border-radius: 8px;
+            display: none;
+            flex-direction: column;
+            gap: 20px;
+            z-index: 20;
+            box-shadow: inset -4px -4px rgba(0, 0, 0, 0.3), inset 4px 4px rgba(255, 255, 255, 0.7), 0 0 20px rgba(0, 0, 0, 0.8);
+            font-family: sans-serif;
+            color: #333;
+            font-weight: bold;
+        }
+
+        #creative-toggle-btn {
+            width: 32px;
+            height: 32px;
+            background-color: #8b8b8b;
+            border: 2px solid #555;
+            border-top-color: #9d9d9d;
+            border-left-color: #9d9d9d;
+            cursor: pointer;
+            background-image: url('textures/diamond_pickaxe.png');
+            background-size: 80%;
+            background-position: center;
+            background-repeat: no-repeat;
+            image-rendering: pixelated;
+            display: block;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+        }
+
+        #creative-toggle-btn:hover {
+            background-color: #a0a0a0;
+            border-color: #fff;
+        }
+
+        #creative-toggle-btn.active {
+            background-color: #5c7aa8;
+            border-color: #fff;
+            box-shadow: inset 2px 2px 5px rgba(0,0,0,0.5);
+        }
+
+        #inventory-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        #inventory-grid.creative-view {
+            display: grid;
+            grid-template-columns: repeat(9, 1fr);
+            gap: 4px;
+            max-height: 256px;
+            overflow-y: auto;
+            padding-right: 5px;
+            background: rgba(0, 0, 0, 0.1);
+            border: 2px solid #8b8b8b;
+            border-radius: 4px;
+        }
+
+        /* 隐藏创造模式下的空行容器样式 */
+        #inventory-grid.creative-view .inv-row {
+            display: contents;
+        }
+
+        .inv-section-title {
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        .inv-row {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 4px;
+        }
+
+        .crafting-area {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .crafting-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 4px;
+            width: 100px;
+            transition: width 0.2s;
+        }
+
+        .crafting-grid.size-3 {
+            grid-template-columns: repeat(3, 1fr);
+            width: 152px;
+        }
+
+        .crafting-arrow {
+            font-size: 24px;
+            color: #555;
+            font-weight: bold;
+        }
+
+        #dragged-icon {
+            position: fixed;
+            width: 48px;
+            height: 48px;
+            pointer-events: none;
+            background-size: 80%;
+            background-position: center;
+            background-repeat: no-repeat;
+            image-rendering: pixelated;
+            z-index: 9999;
+            display: none;
+            transform: translate(-50%, -50%);
+        }
+
+        #dragged-icon::after {
+            content: attr(data-count);
+            position: absolute;
+            bottom: 2px;
+            right: 4px;
+            color: white;
+            font-size: 14px;
+            font-family: monospace;
+            font-weight: bold;
+            text-shadow: 2px 2px 0 #000;
+        }
+
+        #dragged-icon[data-count="0"]::after,
+        #dragged-icon[data-count="1"]::after {
+            display: none;
+        }
+
+        /* 悬浮提示框 */
+        #item-tooltip {
+            position: fixed;
+            background: rgba(16, 0, 16, 0.9);
+            color: #fff;
+            padding: 6px 10px;
+            border: 2px solid #4a0080;
+            z-index: 10000;
+            display: none;
+            pointer-events: none;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 14px;
+            text-shadow: 1px 1px 0 #000;
+        }
+
+        #hand-item {
+            position: absolute;
+            bottom: -30px;
+            right: -30px;
+            width: 350px;
+            height: 350px;
+            background-size: contain;
+            background-position: center;
+            background-repeat: no-repeat;
+            image-rendering: pixelated;
+            transform-origin: bottom right;
+            transform: rotate(-15deg);
+            pointer-events: none;
+            z-index: 4;
+            display: none;
+            filter: drop-shadow(-5px 5px 5px rgba(0, 0, 0, 0.5));
+        }
+
+        /* 状态栏宽度 496px 以对齐快捷栏 */
+        #status-bars {
+            position: absolute;
+            bottom: 85px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: none;
+            width: 496px;
+            justify-content: space-between;
+            z-index: 5;
+            font-size: 20px;
+            letter-spacing: -2px;
+            text-shadow: 2px 2px 0 #000;
+            transition: opacity 0.2s;
+        }
+
+        #health-bar,
+        #hunger-bar {
+            white-space: nowrap;
+        }
+
+        #death-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(150, 0, 0, 0.6);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 50;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        #death-screen h1 {
+            font-size: 64px;
+            text-shadow: 4px 4px 0 #000;
+            margin-bottom: 40px;
+        }
+
+        #respawn-btn {
+            padding: 15px 40px;
+            font-size: 24px;
+            font-weight: bold;
+            background-color: #8b8b8b;
+            color: white;
+            border: 4px solid #fff;
+            cursor: pointer;
+            text-shadow: 2px 2px 0 #000;
+        }
+
+        #respawn-btn:hover {
+            background-color: #a0a0a0;
+        }
+
+        #portal-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: purple;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 6;
+            transition: opacity 0.1s;
+        }
+
+        #boss-bar-container {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            z-index: 5;
+            width: 600px;
+        }
+
+        #boss-name {
+            color: #ffaaff;
+            font-family: monospace;
+            font-size: 20px;
+            font-weight: bold;
+            text-shadow: 2px 2px 0 #000;
+            margin-bottom: 5px;
+        }
+
+        #boss-bar-bg {
+            width: 100%;
+            height: 20px;
+            background-color: #222;
+            border: 2px solid #000;
+        }
+
+        #boss-bar-fill {
+            width: 100%;
+            height: 100%;
+            background-color: #aa00aa;
+            transition: width 0.2s;
+        }
+
+        #win-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            z-index: 9999;
+            color: #55ffff;
+            font-family: monospace;
+            overflow: hidden;
+            padding-top: 100vh;
+        }
+
+        .credits-text {
+            font-size: 24px;
+            text-align: center;
+            line-height: 2;
+            text-shadow: 2px 2px 0 #000;
+            white-space: pre-wrap;
+            width: 80%;
+            max-width: 800px;
+            pointer-events: auto;
+        }
+
+        .win-title {
+            color: #ffff55;
+            font-size: 48px;
+            margin-bottom: 40px;
+            font-weight: bold;
+        }
+
+        /* 原版 UI 风格菜单 */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+        }
+
+        #title-screen,
+        #world-select-screen,
+        #pause-screen,
+        #create-world-screen,
+        #options-screen,
+        #multiplayer-screen {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+        }
+
+        .mc-logo {
+            font-size: 64px;
+            font-weight: bold;
+            color: #e5e5e5;
+            text-shadow: 4px 4px 0 #222;
+            margin-bottom: 60px;
+            position: relative;
+            font-family: Impact, sans-serif;
+            letter-spacing: 2px;
+        }
+
+        .mc-logo span {
+            font-size: 24px;
+            display: block;
+            text-align: center;
+            margin-top: -10px;
+            letter-spacing: 5px;
+        }
+
+        .mc-splash {
+            position: absolute;
+            right: -40px;
+            bottom: 10px;
+            color: #ffff55;
+            font-size: 22px;
+            transform: rotate(-20deg);
+            text-shadow: 2px 2px 0 #3f3f00;
+            font-weight: bold;
+        }
+
+        .mc-menu-title {
+            font-size: 20px;
+            color: #fff;
+            margin-bottom: 15px;
+            text-shadow: 2px 2px 0 #3f3f3f;
+        }
+
+        .mc-button {
+            width: 400px;
+            padding: 10px 0;
+            margin: 4px;
+            background: #707070;
+            border: 2px solid #000;
+            border-top-color: #9d9d9d;
+            border-left-color: #9d9d9d;
+            border-bottom-color: #383838;
+            border-right-color: #383838;
+            color: #e0e0e0;
+            font-size: 16px;
+            font-family: 'Segoe UI', sans-serif;
+            text-align: center;
+            cursor: pointer;
+            text-shadow: 2px 2px 0 #3f3f3f;
+            box-sizing: border-box;
+        }
+
+        .mc-button:hover {
+            background: #5c7aa8;
+            border-top-color: #7b99c7;
+            border-left-color: #7b99c7;
+            border-bottom-color: #2e3d54;
+            border-right-color: #2e3d54;
+            color: #fff;
+        }
+
+        .mc-button.disabled {
+            color: #a0a0a0;
+            text-shadow: 2px 2px 0 #3f3f3f;
+            cursor: not-allowed;
+        }
+
+        .mc-button.disabled:hover {
+            background: #707070;
+            border-top-color: #9d9d9d;
+            border-left-color: #9d9d9d;
+            border-bottom-color: #383838;
+            border-right-color: #383838;
+            color: #a0a0a0;
+        }
+
+        .mc-row {
+            display: flex;
+            width: 400px;
+            justify-content: space-between;
+            margin: 0 auto;
+        }
+
+        .mc-row .mc-button {
+            width: 196px;
+        }
+
+        .mc-row-4 {
+            display: flex;
+            width: 400px;
+            justify-content: space-between;
+            margin: 0 auto;
+        }
+
+        .mc-row-4 .mc-button {
+            width: 96px;
+            font-size: 14px;
+        }
+
+        .mc-input {
+            width: 400px;
+            padding: 10px;
+            margin: 4px 0 15px 0;
+            background: #000;
+            border: 2px solid #a0a0a0;
+            color: #fff;
+            font-family: monospace;
+            font-size: 16px;
+            box-sizing: border-box;
+            outline: none;
+            text-shadow: 2px 2px 0 #3f3f3f;
+        }
+
+        .mc-input:focus {
+            border-color: #fff;
+        }
+
+        #world-list-container {
+            width: 420px;
+            height: 220px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #555;
+            margin-bottom: 10px;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .world-item {
+            padding: 8px;
+            border-bottom: 2px solid #333;
+            cursor: pointer;
+            display: flex;
+            gap: 10px;
+            box-sizing: border-box;
+        }
+
+        .world-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .world-item.selected {
+            background: rgba(255, 255, 255, 0.2);
+            outline: 2px solid #fff;
+            outline-offset: -2px;
+        }
+
+        .world-icon {
+            width: 48px;
+            height: 48px;
+            flex-shrink: 0;
+            background: #555;
+            background-size: cover;
+            image-rendering: pixelated;
+        }
+
+        .world-info {
+            color: #aaa;
+            font-size: 12px;
+            line-height: 1.4;
+            overflow: hidden;
+        }
+
+        .world-title {
+            color: #fff;
+            font-size: 16px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
