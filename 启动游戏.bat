@@ -11,7 +11,7 @@ echo.
 echo --------------------------------------------------------
 
 REM Try to open browser
-start msedge http://127.0.0.1:8000/
+start chrome http://127.0.0.1:8000/
 
 REM Start Server
 echo Starting Python Server...

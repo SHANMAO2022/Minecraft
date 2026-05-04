@@ -44,7 +44,7 @@
 
                 // 熔炉逻辑
                 const input = invState.furnace[0]; const fuel = invState.furnace[1];
-                const recipes = { iron_ore: 'iron_ingot', gold_ore: 'gold_ingot' };
+                const recipes = { iron_ore: 'iron_ingot', gold_ore: 'gold_ingot', raw_porkchop: 'cooked_porkchop' };
                 const isSmeltable = input && recipes[input.type];
                 if (furnaceBurnTime > 0) {
                     furnaceBurnTime -= delta;
