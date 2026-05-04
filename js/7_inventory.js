@@ -1,6 +1,7 @@
         // ==========================================
-        const invState = { hotbar: new Array(9).fill(null), main: new Array(45).fill(null), crafting: new Array(9).fill(null), output: null, dragged: null };
+        const invState = { hotbar: new Array(9).fill(null), main: new Array(45).fill(null), crafting: new Array(9).fill(null), furnace: new Array(2).fill(null), output: null, dragged: null };
         let currentSlotIndex = 0; let isInventoryOpen = false; invState.hotbar[0] = { type: 'obsidian', count: 10 };
+        let furnaceSmeltTime = 0; let furnaceBurnTime = 0; let furnaceMaxBurnTime = 0;
 
         const hotbarEl = document.getElementById('hotbar'); const inventoryGridEl = document.getElementById('inventory-grid'); const draggedIconEl = document.getElementById('dragged-icon'); const handItemEl = document.getElementById('hand-item');
         const creativeToggleBtn = document.getElementById('creative-toggle-btn');
@@ -47,6 +48,7 @@
                 if (c === 'hotbar') item = invState.hotbar[i];
                 else if (c === 'main') item = invState.main[i];
                 else if (c === 'crafting') item = invState.crafting[i];
+                else if (c === 'furnace') item = invState.furnace[i];
                 else if (c === 'output') item = invState.output;
                 if (item) { tooltipEl.innerText = ITEM_NAMES[item.type] || item.type; tooltipEl.style.display = 'block'; }
             }
@@ -85,11 +87,25 @@
                 for (let i = 0; i < 45; i++) { const el = document.querySelector(`[data-container="main"][data-index="${i}"]`); if (el) renderSlotEl(el, invState.main[i]); }
             }
 
-            const gridEl = document.getElementById('crafting-grid'); document.getElementById('crafting-title').innerText = craftingMode === 2 ? "合成 (2x2)" : "高级合成 (3x3)";
-            if (craftingMode === 2) { gridEl.className = 'crafting-grid size-2'; for (let i = 0; i < 9; i++) { const el = document.querySelector(`[data-container="crafting"][data-index="${i}"]`); if (el) el.style.display = i < 4 ? 'block' : 'none'; } }
-            else { gridEl.className = 'crafting-grid size-3'; for (let i = 0; i < 9; i++) { const el = document.querySelector(`[data-container="crafting"][data-index="${i}"]`); if (el) el.style.display = 'block'; } }
+            const gridEl = document.getElementById('crafting-grid'); 
+            const craftingBox = document.getElementById('crafting-box');
+            const furnaceBox = document.getElementById('furnace-box');
+            
+            if (craftingMode === 4) {
+                craftingBox.style.display = 'none';
+                furnaceBox.style.display = 'flex';
+                document.getElementById('crafting-title').innerText = "熔炉";
+            } else {
+                craftingBox.style.display = 'block';
+                furnaceBox.style.display = 'none';
+                document.getElementById('crafting-title').innerText = craftingMode === 2 ? "合成 (2x2)" : "高级合成 (3x3)";
+                if (craftingMode === 2) { gridEl.className = 'crafting-grid size-2'; for (let i = 0; i < 9; i++) { const el = document.querySelector(`[data-container="crafting"][data-index="${i}"]`); if (el) el.style.display = i < 4 ? 'block' : 'none'; } }
+                else { gridEl.className = 'crafting-grid size-3'; for (let i = 0; i < 9; i++) { const el = document.querySelector(`[data-container="crafting"][data-index="${i}"]`); if (el) el.style.display = 'block'; } }
+            }
+
             for (let i = 0; i < 9; i++) { const el = document.querySelector(`[data-container="hotbar"][data-index="${i}"]`); renderSlotEl(el, invState.hotbar[i]); if (i === currentSlotIndex) el.classList.add('active'); else el.classList.remove('active'); }
             for (let i = 0; i < 9; i++) { const el = document.querySelector(`[data-container="crafting"][data-index="${i}"]`); if (el) renderSlotEl(el, invState.crafting[i]); }
+            for (let i = 0; i < 2; i++) { const el = document.querySelector(`[data-container="furnace"][data-index="${i}"]`); if (el) renderSlotEl(el, invState.furnace[i]); }
             const outputEl = document.querySelector(`[data-container="output"][data-index="0"]`); if (outputEl) renderSlotEl(outputEl, invState.output);
             if (invState.dragged) { draggedIconEl.style.display = 'block'; renderSlotEl(draggedIconEl, invState.dragged); } else { draggedIconEl.style.display = 'none'; } updateHeldItem3D();
         }
@@ -108,21 +124,22 @@
             if (total === 1 && counts['log']) invState.output = { type: 'planks', count: 4 }; 
             else if (total === 1 && counts['blaze_rod']) invState.output = { type: 'blaze_powder', count: 2 }; 
             else if (total === 2 && counts['ender_pearl'] && counts['blaze_powder']) invState.output = { type: 'ender_eye', count: 1 }; 
-            else if (total === 2 && counts['iron_ore'] && counts['flint']) invState.output = { type: 'flint_and_steel', count: 1 };
+            else if (total === 2 && counts['iron_ingot'] && counts['flint']) invState.output = { type: 'flint_and_steel', count: 1 };
             else {
                 const p = getCraftingPattern();
                 if (p === "planks,;planks,;") invState.output = { type: 'stick', count: 4 }; 
                 else if (p === "planks,planks,;planks,planks,;") invState.output = { type: 'crafting_table', count: 1 }; 
+                else if (p === "stone,stone,stone,;stone,null,stone,;stone,stone,stone,;") invState.output = { type: 'furnace', count: 1 };
                 else if (p === "flint,;stick,;") invState.output = {type: 'arrow', count: 4};
-                else if (p === "coal_ore,;stick,;") invState.output = { type: 'torch', count: 4 };
+                else if (p === "coal,;stick,;") invState.output = { type: 'torch', count: 4 };
                 else if (p === "string,string,string,;planks,planks,planks,;") invState.output = { type: 'bed', count: 1 };
                 
                 if (craftingMode === 3) {
                     if (p === "planks,planks,planks,;null,stick,null,;null,stick,null,;") invState.output = { type: 'wooden_pickaxe', count: 1 }; 
                     else if (p === "stone,stone,stone,;null,stick,null,;null,stick,null,;") invState.output = { type: 'stone_pickaxe', count: 1 }; 
-                    else if (p === "iron_ore,iron_ore,iron_ore,;null,stick,null,;null,stick,null,;") invState.output = { type: 'iron_pickaxe', count: 1 }; 
-                    else if (p === "gold_ore,gold_ore,gold_ore,;null,stick,null,;null,stick,null,;") invState.output = { type: 'gold_pickaxe', count: 1 }; 
-                    else if (p === "diamond_ore,diamond_ore,diamond_ore,;null,stick,null,;null,stick,null,;") invState.output = { type: 'diamond_pickaxe', count: 1 };
+                    else if (p === "iron_ingot,iron_ingot,iron_ingot,;null,stick,null,;null,stick,null,;") invState.output = { type: 'iron_pickaxe', count: 1 }; 
+                    else if (p === "gold_ingot,gold_ingot,gold_ingot,;null,stick,null,;null,stick,null,;") invState.output = { type: 'gold_pickaxe', count: 1 }; 
+                    else if (p === "diamond,diamond,diamond,;null,stick,null,;null,stick,null,;") invState.output = { type: 'diamond_pickaxe', count: 1 };
                     else if (p === "string,stick,null,;string,null,stick,;string,stick,null,;" || p === "null,stick,string,;stick,null,string,;null,stick,string,;") invState.output = {type: 'bow', count: 1};
                 }
             }
@@ -138,7 +155,7 @@
                 if (container === 'output') { if (invState.output && (!invState.dragged || (invState.dragged.type === invState.output.type && invState.dragged.count + invState.output.count <= 64))) { if (!invState.dragged) invState.dragged = { ...invState.output }; else invState.dragged.count += invState.output.count; for (let i = 0; i < 9; i++) { if (invState.crafting[i]) { invState.crafting[i].count--; if (invState.crafting[i].count <= 0) invState.crafting[i] = null; } } } }
                 else { if (invState.dragged && targetSlot) { if (invState.dragged.type === targetSlot.type && targetSlot.count < 64) { let moveAmount = Math.min(64 - targetSlot.count, invState.dragged.count); targetSlot.count += moveAmount; invState.dragged.count -= moveAmount; if (invState.dragged.count <= 0) invState.dragged = null; } else { invState[container][index] = invState.dragged; invState.dragged = targetSlot; } } else if (invState.dragged && !targetSlot) { invState[container][index] = invState.dragged; invState.dragged = null; } else if (!invState.dragged && targetSlot) { invState[container][index] = null; invState.dragged = targetSlot; } }
             }
-            if (container === 'crafting' || container === 'output') checkCrafting(); renderInventoryUI();
+            if (container === 'crafting' || container === 'output' || container === 'furnace') checkCrafting(); renderInventoryUI();
         }
 
         function addBlockToInventory(type, count = 1) {

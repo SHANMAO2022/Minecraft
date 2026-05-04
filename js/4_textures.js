@@ -117,6 +117,22 @@
             bed_head: [new THREE.MeshLambertMaterial({ color: 0xff0000 }), new THREE.MeshLambertMaterial({ color: 0xff0000 }), new THREE.MeshLambertMaterial({ color: 0xffffff }), new THREE.MeshLambertMaterial({ color: 0x884400 }), new THREE.MeshLambertMaterial({ color: 0xff0000 }), new THREE.MeshLambertMaterial({ color: 0xff0000 })],
             bed_foot: [new THREE.MeshLambertMaterial({ color: 0xff0000 }), new THREE.MeshLambertMaterial({ color: 0xff0000 }), new THREE.MeshLambertMaterial({ color: 0xff0000 }), new THREE.MeshLambertMaterial({ color: 0x884400 }), new THREE.MeshLambertMaterial({ color: 0xff0000 }), new THREE.MeshLambertMaterial({ color: 0xff0000 })],
             torch: new THREE.MeshLambertMaterial({ map: createPixelTexture('torch'), transparent: true, alphaTest: 0.1, emissive: 0xffaa00, emissiveIntensity: 0.8, side: THREE.DoubleSide }),
+            furnace: [
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_side') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_side') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_top') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_top') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_front') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_side') })
+            ],
+            furnace_on: [
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_side') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_side') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_top') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_top') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_front_on'), emissive: 0xffaa00, emissiveIntensity: 0.5 }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_side') })
+            ]
         };
         ['dirt', 'stone', 'bedrock', 'sand', 'planks', 'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore', 'obsidian', 'netherrack', 'magma', 'end_stone', 'stone_brick'].forEach(k => { if (!materials[k]) materials[k] = new THREE.MeshLambertMaterial({ map: createPixelTexture(k) }); });
         
@@ -124,14 +140,16 @@
         for (let key of allItemTypes) { 
             if (materials[key]) {
                 if (Array.isArray(materials[key])) {
-                    // For blocks with multiple faces, use a side-like texture for the icon
-                    icons[key] = materials[key][0].map ? materials[key][0].map.uiIcon : 'textures/' + key + '.png';
+                    if (key === 'furnace') icons[key] = 'textures/furnace_front.png';
+                    else icons[key] = materials[key][0].map ? materials[key][0].map.uiIcon : 'textures/' + key + '.png';
                 } else {
                     icons[key] = materials[key].map ? materials[key].map.uiIcon : 'textures/' + key + '.png';
                 }
             } else {
                 icons[key] = 'textures/' + key + '.png';
             }
+            // Ensure icons are pre-loaded for 3D hand view
+            if (!itemPixels[key]) createPixelTexture(key);
         }
 
         // ==========================================

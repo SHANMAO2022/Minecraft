@@ -152,12 +152,24 @@ made by SHANMAO2022
     
     <div id="inventory-ui">
         <div class="crafting-area">
-            <div>
+            <div id="crafting-box">
                 <div class="inv-section-title" id="crafting-title">合成 (2x2)</div>
                 <div class="crafting-grid size-2" id="crafting-grid">
                     <div class="slot" data-container="crafting" data-index="0"></div><div class="slot" data-container="crafting" data-index="1"></div><div class="slot" data-container="crafting" data-index="2" style="display:none;"></div>
                     <div class="slot" data-container="crafting" data-index="3"></div><div class="slot" data-container="crafting" data-index="4"></div><div class="slot" data-container="crafting" data-index="5" style="display:none;"></div>
                     <div class="slot" data-container="crafting" data-index="6" style="display:none;"></div><div class="slot" data-container="crafting" data-index="7" style="display:none;"></div><div class="slot" data-container="crafting" data-index="8" style="display:none;"></div>
+                </div>
+            </div>
+            <div id="furnace-box" style="display:none; flex-direction: row; align-items: center; gap: 15px;">
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <div class="inv-section-title">燃料/原料</div>
+                    <div class="slot" data-container="furnace" data-index="0" id="furnace-input"></div>
+                    <div id="smelt-flame" style="text-align: center; font-size: 20px; color: #555;">🔥</div>
+                    <div class="slot" data-container="furnace" data-index="1" id="furnace-fuel"></div>
+                </div>
+                <div id="smelt-progress-container" style="width: 30px; height: 10px; background: #555; position: relative;">
+                    <div id="smelt-progress-fill" style="width: 0%; height: 100%; background: #ffff55;"></div>
+                    <div style="position: absolute; top: -15px; left: 0; width: 100%; text-align: center; font-size: 14px;">➜</div>
                 </div>
             </div>
             <div class="crafting-arrow">➜</div>
@@ -293,7 +305,7 @@ made by SHANMAO2022
         let isPlaying = false; 
 
         const ITEM_NAMES = {
-            grass: "草方块", dirt: "泥土", sand: "沙子", leaves: "树叶", tall_grass: "高草丛", log: "橡木原木", planks: "橡木木板", stone: "石头", coal_ore: "煤矿石", iron_ore: "铁矿石", gold_ore: "金矿石", diamond_ore: "钻石矿石", bedrock: "基岩", water: "水", lava: "熔岩", crafting_table: "工作台", end_rod: "末地烛", obsidian: "黑曜石", nether_portal: "下界传送门", netherrack: "下界岩", magma: "岩浆块", end_stone: "末地石", end_portal_frame_empty: "末地传送门框架", end_portal_frame_filled: "激活的传送门框架", end_portal: "末地传送门", stone_brick: "石砖", return_portal: "返回传送门", wooden_pickaxe: "木镐", stone_pickaxe: "石镐", iron_pickaxe: "铁镐", gold_pickaxe: "金镐", diamond_pickaxe: "钻石镐", raw_porkchop: "生猪排", rotten_flesh: "腐肉", flint_and_steel: "打火石", ender_pearl: "末影珍珠", blaze_powder: "烈焰粉", ender_eye: "末影之眼", blaze_rod: "烈焰棒", bow: "弓", arrow: "箭", stick: "木棍", string: "线", flint: "燧石", torch: "火把", bed: "床"
+            grass: "草方块", dirt: "泥土", sand: "沙子", leaves: "树叶", tall_grass: "高草丛", log: "橡木原木", planks: "橡木木板", stone: "石头", coal_ore: "煤矿石", iron_ore: "铁矿石", gold_ore: "金矿石", diamond_ore: "钻石矿石", bedrock: "基岩", water: "水", lava: "熔岩", crafting_table: "工作台", furnace: "熔炉", end_rod: "末地烛", obsidian: "黑曜石", nether_portal: "下界传送门", netherrack: "下界岩", magma: "岩浆块", end_stone: "末地石", end_portal_frame_empty: "末地传送门框架", end_portal_frame_filled: "激活的传送门框架", end_portal: "末地传送门", stone_brick: "石砖", return_portal: "返回传送门", wooden_pickaxe: "木镐", stone_pickaxe: "石镐", iron_pickaxe: "铁镐", gold_pickaxe: "金镐", diamond_pickaxe: "钻石镐", iron_ingot: "铁锭", gold_ingot: "金锭", coal: "煤炭", diamond: "钻石", raw_porkchop: "生猪排", rotten_flesh: "腐肉", flint_and_steel: "打火石", ender_pearl: "末影珍珠", blaze_powder: "烈焰粉", ender_eye: "末影之眼", blaze_rod: "烈焰棒", bow: "弓", arrow: "箭", stick: "木棍", string: "线", flint: "燧石", torch: "火把", bed: "床"
         };
 
         const ITEMS = {
@@ -304,7 +316,8 @@ made by SHANMAO2022
             coal_ore: { type: 'block', hardness: 6.0, tool: 'pickaxe', tier: 1 }, iron_ore: { type: 'block', hardness: 8.0, tool: 'pickaxe', tier: 2 },
             gold_ore: { type: 'block', hardness: 10.0, tool: 'pickaxe', tier: 3 }, diamond_ore: { type: 'block', hardness: 12.0, tool: 'pickaxe', tier: 3 },
             bedrock: { type: 'block', hardness: Infinity, tool: 'none', tier: 0 }, water: { type: 'block', hardness: Infinity, tool: 'none', tier: 0 }, lava: { type: 'block', hardness: Infinity, tool: 'none', tier: 0 }, 
-            crafting_table: { type: 'block', hardness: 2.5, tool: 'none', tier: 0 }, end_rod: { type: 'block', hardness: 0.1, tool: 'none', tier: 0 },
+            crafting_table: { type: 'block', hardness: 2.5, tool: 'none', tier: 0 }, furnace: { type: 'block', hardness: 3.5, tool: 'pickaxe', tier: 1 },
+            end_rod: { type: 'block', hardness: 0.1, tool: 'none', tier: 0 },
             obsidian: { type: 'block', hardness: 50.0, tool: 'pickaxe', tier: 3 }, nether_portal: { type: 'block', hardness: Infinity, tool: 'none', tier: 0 }, 
             netherrack: { type: 'block', hardness: 0.4, tool: 'pickaxe', tier: 1 }, magma: { type: 'block', hardness: 0.5, tool: 'pickaxe', tier: 1 },
             end_stone: { type: 'block', hardness: 3.0, tool: 'pickaxe', tier: 1 }, end_portal_frame_empty: { type: 'block', hardness: Infinity, tool: 'none', tier: 0 },
@@ -312,13 +325,15 @@ made by SHANMAO2022
             stone_brick: { type: 'block', hardness: 2.5, tool: 'pickaxe', tier: 1 }, return_portal: { type: 'block', hardness: Infinity, tool: 'none', tier: 0 }, 
             wooden_pickaxe: { type: 'tool', toolType: 'pickaxe', tier: 1, power: 4 }, stone_pickaxe: { type: 'tool', toolType: 'pickaxe', tier: 2, power: 8 },  
             iron_pickaxe: { type: 'tool', toolType: 'pickaxe', tier: 3, power: 15 }, gold_pickaxe: { type: 'tool', toolType: 'pickaxe', tier: 3, power: 25 }, 
-            diamond_pickaxe: { type: 'tool', toolType: 'pickaxe', tier: 4, power: 30 }, raw_porkchop: { type: 'food', hungerRestore: 6 }, rotten_flesh: { type: 'food', hungerRestore: 4 },
+            diamond_pickaxe: { type: 'tool', toolType: 'pickaxe', tier: 4, power: 30 }, 
+            iron_ingot: { type: 'item' }, gold_ingot: { type: 'item' }, coal: { type: 'item', fuelValue: 80 }, diamond: { type: 'item' },
+            raw_porkchop: { type: 'food', hungerRestore: 6 }, rotten_flesh: { type: 'food', hungerRestore: 4 },
             flint_and_steel: { type: 'item' }, ender_pearl: { type: 'item' }, blaze_powder: { type: 'item' }, ender_eye: { type: 'item' },
             blaze_rod: { type: 'item' }, bow: { type: 'tool', toolType: 'bow', tier: 1, power: 8 }, arrow: { type: 'item' }, stick: { type: 'item' }, string: { type: 'item' }, flint: { type: 'item' }, torch: { type: 'block', hardness: 0.0, tool: 'none', tier: 0 }, bed: { type: 'block', hardness: 0.2, tool: 'none', tier: 0 }
         };
 
-        const blockTypes = ['grass', 'dirt', 'stone', 'bedrock', 'log', 'leaves', 'tall_grass', 'sand', 'planks', 'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore', 'obsidian', 'nether_portal', 'netherrack', 'magma', 'end_stone', 'end_portal_frame_empty', 'end_portal_frame_filled', 'end_portal', 'stone_brick', 'return_portal', 'water', 'lava', 'crafting_table', 'end_rod', 'torch', 'bed'];
-        const itemTypes = ['wooden_pickaxe', 'stone_pickaxe', 'iron_pickaxe', 'gold_pickaxe', 'diamond_pickaxe', 'raw_porkchop', 'rotten_flesh', 'flint_and_steel', 'ender_pearl', 'blaze_powder', 'ender_eye', 'blaze_rod', 'bow', 'arrow', 'stick', 'string', 'flint'];
+        const blockTypes = ['grass', 'dirt', 'stone', 'bedrock', 'log', 'leaves', 'tall_grass', 'sand', 'planks', 'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore', 'obsidian', 'nether_portal', 'netherrack', 'magma', 'end_stone', 'end_portal_frame_empty', 'end_portal_frame_filled', 'end_portal', 'stone_brick', 'return_portal', 'water', 'lava', 'crafting_table', 'furnace', 'end_rod', 'torch', 'bed'];
+        const itemTypes = ['wooden_pickaxe', 'stone_pickaxe', 'iron_pickaxe', 'gold_pickaxe', 'diamond_pickaxe', 'iron_ingot', 'gold_ingot', 'coal', 'diamond', 'raw_porkchop', 'rotten_flesh', 'flint_and_steel', 'ender_pearl', 'blaze_powder', 'ender_eye', 'blaze_rod', 'bow', 'arrow', 'stick', 'string', 'flint'];
         const allItemTypes = [...blockTypes, ...itemTypes];
 
         const maxBlocksPerType = {}; blockTypes.forEach(t => maxBlocksPerType[t] = 2000);
@@ -370,7 +385,16 @@ made by SHANMAO2022
 
         const itemPixels = {}; 
 
+        const textureLoader = new THREE.TextureLoader();
         function createPixelTexture(type) {
+            const path = 'textures/' + type + '.png';
+            const texture = textureLoader.load(path);
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+            texture.colorSpace = THREE.SRGBColorSpace;
+            texture.uiIcon = path;
+
+            // Procedural fallback for icons if needed (legacy)
             const canvas = document.createElement('canvas'); canvas.width = 16; canvas.height = 16; 
             const ctx = canvas.getContext('2d'); const imgData = ctx.createImageData(16, 16); const data = imgData.data;
 
@@ -395,12 +419,23 @@ made by SHANMAO2022
                 else if (type === 'torch') { a = 0; if (x >= 7 && x <= 8 && y >= 6 && y <= 12) { r=139; g=69; b=19; a=255; } if (x >= 7 && x <= 8 && y >= 4 && y <= 5) { r=255; g=200; b=0; a=255; } }
                 else if (type === 'bed_top') { if (y < 6) { r=255; g=255; b=255; } else { r=200; g=50; b=50; } if (x===0||x===15||y===0||y===15){r*=0.8;g*=0.8;b*=0.8;} }
                 else if (type === 'bed_side') { if (y < 6) { r=200; g=50; b=50; } else if (y < 10) { r=255; g=255; b=255; } else { r=160; g=110; b=60; } if (x===0||x===15||y===0||y===15){r*=0.8;g*=0.8;b*=0.8;} }
+                else if (type === 'furnace_front') { r=100+noise; g=100+noise; b=100+noise; if(x>2 && x<13 && y>2 && y<13){ r=30; g=30; b=30; } }
+                else if (type === 'furnace_side') { r=100+noise; g=100+noise; b=100+noise; if(y%4===0){ r*=0.9; } }
+                else if (type === 'furnace_top') { r=120+noise; g=120+noise; b=120+noise; const d=Math.sqrt((x-7.5)**2+(y-7.5)**2); if(d>6){r*=0.8;} }
+                else if (type === 'iron_ingot') { a=0; if(x>3 && x<13 && y>6 && y<10){ r=200; g=200; b=200; a=255; } }
+                else if (type === 'gold_ingot') { a=0; if(x>3 && x<13 && y>6 && y<10){ r=255; g=220; b=0; a=255; } }
+                else if (type === 'coal') { a=0; if(x>4 && x<12 && y>4 && y<12){ r=30; g=30; b=30; a=255; } }
+                else if (type === 'diamond') { a=0; if(x>4 && x<12 && y>4 && y<12){ r=50; g=220; b=255; a=255; } }
                 
                 const idx = i * 4; data[idx] = Math.max(0, Math.min(255, r)); data[idx + 1] = Math.max(0, Math.min(255, g)); data[idx + 2] = Math.max(0, Math.min(255, b)); data[idx + 3] = a;
             }
             ctx.putImageData(imgData, 0, 0); itemPixels[type] = new Uint8ClampedArray(imgData.data);
             if (ITEMS[type] && ITEMS[type].type === 'block' && type !== 'leaves' && type !== 'tall_grass' && type !== 'nether_portal' && type !== 'water' && type !== 'lava' && type !== 'end_rod' && type !== 'torch') { ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 1; ctx.strokeRect(0, 0, 16, 16); }
-            const texture = new THREE.CanvasTexture(canvas); texture.magFilter = THREE.NearestFilter; texture.minFilter = THREE.NearestFilter; texture.colorSpace = THREE.SRGBColorSpace; texture.uiIcon = canvas.toDataURL('image/png'); return texture;
+            
+            // Prioritize image-based texture for furnace components
+            if (type.startsWith('furnace')) return texture;
+
+            const canvasTexture = new THREE.CanvasTexture(canvas); canvasTexture.magFilter = THREE.NearestFilter; canvasTexture.minFilter = THREE.NearestFilter; canvasTexture.colorSpace = THREE.SRGBColorSpace; canvasTexture.uiIcon = canvas.toDataURL('image/png'); return canvasTexture;
         }
 
         const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
@@ -412,10 +447,26 @@ made by SHANMAO2022
             nether_portal: new THREE.MeshLambertMaterial({ map: createPixelTexture('nether_portal'), transparent: true, opacity: 0.8, side: THREE.DoubleSide }), end_rod: new THREE.MeshLambertMaterial({ map: createPixelTexture('end_rod'), transparent: true, alphaTest: 0.1 }),
             water: new THREE.MeshLambertMaterial({ map: createPixelTexture('water'), transparent: true, opacity: 0.6, depthWrite: false }), lava: new THREE.MeshLambertMaterial({ map: createPixelTexture('lava'), transparent: true, opacity: 0.9 }),
             bed: [ new THREE.MeshLambertMaterial({ map: createPixelTexture('bed_side') }), new THREE.MeshLambertMaterial({ map: createPixelTexture('bed_side') }), new THREE.MeshLambertMaterial({ map: createPixelTexture('bed_top') }), new THREE.MeshLambertMaterial({ map: createPixelTexture('planks') }), new THREE.MeshLambertMaterial({ map: createPixelTexture('bed_side') }), new THREE.MeshLambertMaterial({ map: createPixelTexture('bed_side') }) ],
-            torch: new THREE.MeshLambertMaterial({ map: createPixelTexture('torch'), transparent: true, alphaTest: 0.1, emissive: 0xffaa00, emissiveIntensity: 0.8, side: THREE.DoubleSide })
+            torch: new THREE.MeshLambertMaterial({ map: createPixelTexture('torch'), transparent: true, alphaTest: 0.1, emissive: 0xffaa00, emissiveIntensity: 0.8, side: THREE.DoubleSide }),
+            furnace: [
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_side') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_side') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_top') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_top') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_front') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_side') })
+            ],
+            furnace_on: [
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_side') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_side') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_top') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_top') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_front_on'), emissive: 0xffaa00, emissiveIntensity: 0.5 }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_side') })
+            ]
         };
         ['dirt', 'stone', 'bedrock', 'sand', 'planks', 'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore', 'obsidian', 'netherrack', 'magma', 'end_stone', 'end_portal_frame_empty', 'end_portal_frame_filled', 'end_portal', 'stone_brick', 'return_portal'].forEach(k => { if (!materials[k]) materials[k] = new THREE.MeshLambertMaterial({ map: createPixelTexture(k) }); });
-        const icons = {}; for (let key of allItemTypes) { if (materials[key]) icons[key] = Array.isArray(materials[key]) ? materials[key][0].map.uiIcon : materials[key].map.uiIcon; else icons[key] = createPixelTexture(key).uiIcon; }
+        const icons = {}; for (let key of allItemTypes) { if (materials[key]) { if (key === 'furnace') icons[key] = 'textures/furnace_front.png'; else icons[key] = Array.isArray(materials[key]) ? materials[key][0].map.uiIcon : materials[key].map.uiIcon; } else icons[key] = createPixelTexture(key).uiIcon; }
 
         let currentHealth = 20; let currentHunger = 20; let isDead = false;
         const healthBarEl = document.getElementById('health-bar'); const hungerBarEl = document.getElementById('hunger-bar'); const deathScreenEl = document.getElementById('death-screen');
@@ -423,7 +474,7 @@ made by SHANMAO2022
 
         function updateStatusUI() {
             healthBarEl.innerHTML = ''; for(let i=0; i<10; i++) healthBarEl.innerHTML += (i < Math.ceil(currentHealth/2)) ? '❤️' : '🖤';
-            hungerBarEl.innerHTML = ''; for(let i=0; i<10; i++) hungerBarEl.innerHTML += (i < Math.ceil(currentHunger/2)) ? '🍗' : '🦴';
+            hungerBarEl.innerHTML = ''; for(let i=0; i<10; i++) hungerBarEl.innerHTML += (i >= 10 - Math.ceil(currentHunger/2)) ? '🍗' : '🦴'; // Deplete from left to right
             document.getElementById('status-bars').style.opacity = (gameMode === 0) ? '0' : '1';
         }
 
@@ -492,8 +543,9 @@ made by SHANMAO2022
             else { appendChat('未知指令。'); }
         }
 
-        const invState = { hotbar: new Array(9).fill(null), main: new Array(45).fill(null), crafting: new Array(9).fill(null), output: null, dragged: null };
+        const invState = { hotbar: new Array(9).fill(null), main: new Array(45).fill(null), crafting: new Array(9).fill(null), furnace: new Array(2).fill(null), output: null, dragged: null };
         let currentSlotIndex = 0; let isInventoryOpen = false; invState.hotbar[0] = { type: 'obsidian', count: 10 }; 
+        let furnaceSmeltTime = 0; let furnaceBurnTime = 0; let furnaceMaxBurnTime = 0;
 
         const hotbarEl = document.getElementById('hotbar'); const inventoryGridEl = document.getElementById('inventory-grid'); const draggedIconEl = document.getElementById('dragged-icon'); const handItemEl = document.getElementById('hand-item'); 
         for (let i = 0; i < 9; i++) { const slot = document.createElement('div'); slot.className = 'slot'; slot.id = `hotbar-${i}`; slot.setAttribute('data-container', 'hotbar'); slot.setAttribute('data-index', i); slot.setAttribute('data-key', i + 1); hotbarEl.appendChild(slot); }
@@ -516,6 +568,7 @@ made by SHANMAO2022
                 if (c==='hotbar') item = invState.hotbar[i];
                 else if (c==='main') item = invState.main[i];
                 else if (c==='crafting') item = invState.crafting[i];
+                else if (c==='furnace') item = invState.furnace[i];
                 else if (c==='output') item = invState.output;
                 if (item) { tooltipEl.innerText = ITEM_NAMES[item.type] || item.type; tooltipEl.style.display = 'block'; }
             }
@@ -524,12 +577,26 @@ made by SHANMAO2022
         document.addEventListener('mouseout', (e) => { if (e.target.closest('.slot')) tooltipEl.style.display = 'none'; });
 
         function renderInventoryUI() {
-            const gridEl = document.getElementById('crafting-grid'); document.getElementById('crafting-title').innerText = craftingMode === 2 ? "合成 (2x2)" : "高级合成 (3x3)";
-            if (craftingMode === 2) { gridEl.className = 'crafting-grid size-2'; for(let i=0; i<9; i++) { const el = document.querySelector(`[data-container="crafting"][data-index="${i}"]`); if (el) el.style.display = i < 4 ? 'block' : 'none'; } } 
-            else { gridEl.className = 'crafting-grid size-3'; for(let i=0; i<9; i++) { const el = document.querySelector(`[data-container="crafting"][data-index="${i}"]`); if (el) el.style.display = 'block'; } }
+            const gridEl = document.getElementById('crafting-grid'); 
+            const craftingBox = document.getElementById('crafting-box');
+            const furnaceBox = document.getElementById('furnace-box');
+            
+            if (craftingMode === 4) {
+                craftingBox.style.display = 'none';
+                furnaceBox.style.display = 'flex';
+                document.getElementById('crafting-title').innerText = "熔炉";
+            } else {
+                craftingBox.style.display = 'block';
+                furnaceBox.style.display = 'none';
+                document.getElementById('crafting-title').innerText = craftingMode === 2 ? "合成 (2x2)" : "高级合成 (3x3)";
+                if (craftingMode === 2) { gridEl.className = 'crafting-grid size-2'; for(let i=0; i<9; i++) { const el = document.querySelector(`[data-container="crafting"][data-index="${i}"]`); if (el) el.style.display = i < 4 ? 'block' : 'none'; } } 
+                else { gridEl.className = 'crafting-grid size-3'; for(let i=0; i<9; i++) { const el = document.querySelector(`[data-container="crafting"][data-index="${i}"]`); if (el) el.style.display = 'block'; } }
+            }
+
             for (let i = 0; i < 9; i++) { const el = document.querySelector(`[data-container="hotbar"][data-index="${i}"]`); renderSlotEl(el, invState.hotbar[i]); if (i === currentSlotIndex) el.classList.add('active'); else el.classList.remove('active'); }
             for (let i = 0; i < 45; i++) { const el = document.querySelector(`[data-container="main"][data-index="${i}"]`); if (el) renderSlotEl(el, invState.main[i]); }
             for (let i = 0; i < 9; i++) { const el = document.querySelector(`[data-container="crafting"][data-index="${i}"]`); if (el) renderSlotEl(el, invState.crafting[i]); }
+            for (let i = 0; i < 2; i++) { const el = document.querySelector(`[data-container="furnace"][data-index="${i}"]`); if (el) renderSlotEl(el, invState.furnace[i]); }
             const outputEl = document.querySelector(`[data-container="output"][data-index="0"]`); if (outputEl) renderSlotEl(outputEl, invState.output);
             if (invState.dragged) { draggedIconEl.style.display = 'block'; renderSlotEl(draggedIconEl, invState.dragged); } else { draggedIconEl.style.display = 'none'; } updateHeldItem3D();
         }
@@ -545,14 +612,25 @@ made by SHANMAO2022
             const c = invState.crafting; const t = (i) => c[i] ? c[i].type : null; let total = 0; let counts = {};
             for(let i=0; i<9; i++) { if(t(i)) { total++; counts[t(i)] = (counts[t(i)]||0)+1; } }
             invState.output = null; if (total === 0) return;
-            if (total === 1 && counts['log']) invState.output = { type: 'planks', count: 4 }; else if (total === 1 && counts['blaze_rod']) invState.output = { type: 'blaze_powder', count: 2 }; else if (total === 2 && counts['ender_pearl'] && counts['blaze_powder']) invState.output = { type: 'ender_eye', count: 1 }; else if (total === 2 && counts['iron_ore'] && counts['flint']) invState.output = { type: 'flint_and_steel', count: 1 };
+            if (total === 1 && counts['log']) invState.output = { type: 'planks', count: 4 }; 
+            else if (total === 1 && counts['blaze_rod']) invState.output = { type: 'blaze_powder', count: 2 }; 
+            else if (total === 2 && counts['ender_pearl'] && counts['blaze_powder']) invState.output = { type: 'ender_eye', count: 1 }; 
+            else if (total === 2 && counts['iron_ingot'] && counts['flint']) invState.output = { type: 'flint_and_steel', count: 1 };
             else {
                 const p = getCraftingPattern();
-                if (p === "planks,;planks,;") invState.output = {type: 'stick', count: 4}; else if (p === "planks,planks,;planks,planks,;") invState.output = {type: 'crafting_table', count: 1}; else if (p === "flint,;stick,;") invState.output = {type: 'arrow', count: 4};
-                else if (p === "coal_ore,;stick,;") invState.output = {type: 'torch', count: 4};
+                if (p === "planks,;planks,;") invState.output = {type: 'stick', count: 4}; 
+                else if (p === "planks,planks,;planks,planks,;") invState.output = {type: 'crafting_table', count: 1}; 
+                else if (p === "stone,stone,stone,;stone,null,stone,;stone,stone,stone,;") invState.output = { type: 'furnace', count: 1 };
+                else if (p === "flint,;stick,;") invState.output = {type: 'arrow', count: 4};
+                else if (p === "coal,;stick,;") invState.output = {type: 'torch', count: 4};
                 else if (p === "string,string,string,;planks,planks,planks,;") invState.output = {type: 'bed', count: 1};
                 if (craftingMode === 3) {
-                    if (p === "planks,planks,planks,;null,stick,null,;null,stick,null,;") invState.output = {type: 'wooden_pickaxe', count: 1}; else if (p === "stone,stone,stone,;null,stick,null,;null,stick,null,;") invState.output = {type: 'stone_pickaxe', count: 1}; else if (p === "iron_ore,iron_ore,iron_ore,;null,stick,null,;null,stick,null,;") invState.output = {type: 'iron_pickaxe', count: 1}; else if (p === "gold_ore,gold_ore,gold_ore,;null,stick,null,;null,stick,null,;") invState.output = {type: 'gold_pickaxe', count: 1}; else if (p === "diamond_ore,diamond_ore,diamond_ore,;null,stick,null,;null,stick,null,;") invState.output = {type: 'diamond_pickaxe', count: 1}; else if (p === "string,stick,null,;string,null,stick,;string,stick,null,;" || p === "null,stick,string,;stick,null,string,;null,stick,string,;") invState.output = {type: 'bow', count: 1};
+                    if (p === "planks,planks,planks,;null,stick,null,;null,stick,null,;") invState.output = {type: 'wooden_pickaxe', count: 1}; 
+                    else if (p === "stone,stone,stone,;null,stick,null,;null,stick,null,;") invState.output = {type: 'stone_pickaxe', count: 1}; 
+                    else if (p === "iron_ingot,iron_ingot,iron_ingot,;null,stick,null,;null,stick,null,;") invState.output = {type: 'iron_pickaxe', count: 1}; 
+                    else if (p === "gold_ingot,gold_ingot,gold_ingot,;null,stick,null,;null,stick,null,;") invState.output = {type: 'gold_pickaxe', count: 1}; 
+                    else if (p === "diamond,diamond,diamond,;null,stick,null,;null,stick,null,;") invState.output = {type: 'diamond_pickaxe', count: 1}; 
+                    else if (p === "string,stick,null,;string,null,stick,;string,stick,null,;" || p === "null,stick,string,;stick,null,string,;null,stick,string,;") invState.output = {type: 'bow', count: 1};
                 }
             }
         }
@@ -567,7 +645,7 @@ made by SHANMAO2022
                 if (container === 'output') { if (invState.output && (!invState.dragged || (invState.dragged.type === invState.output.type && invState.dragged.count + invState.output.count <= 64))) { if (!invState.dragged) invState.dragged = { ...invState.output }; else invState.dragged.count += invState.output.count; for (let i = 0; i < 9; i++) { if (invState.crafting[i]) { invState.crafting[i].count--; if (invState.crafting[i].count <= 0) invState.crafting[i] = null; } } } } 
                 else { if (invState.dragged && targetSlot) { if (invState.dragged.type === targetSlot.type && targetSlot.count < 64) { let moveAmount = Math.min(64 - targetSlot.count, invState.dragged.count); targetSlot.count += moveAmount; invState.dragged.count -= moveAmount; if (invState.dragged.count <= 0) invState.dragged = null; } else { invState[container][index] = invState.dragged; invState.dragged = targetSlot; } } else if (invState.dragged && !targetSlot) { invState[container][index] = invState.dragged; invState.dragged = null; } else if (!invState.dragged && targetSlot) { invState[container][index] = null; invState.dragged = targetSlot; } }
             }
-            if (container === 'crafting' || container === 'output') checkCrafting(); renderInventoryUI();
+            if (container === 'crafting' || container === 'output' || container === 'furnace') checkCrafting(); renderInventoryUI();
         }
 
         function addBlockToInventory(type, count = 1) {
@@ -1245,6 +1323,7 @@ made by SHANMAO2022
                     const cbx = Math.floor(p.x); const cby = Math.floor(p.y); const cbz = Math.floor(p.z);
                     const clickedBlock = getBlock(cbx, cby, cbz);
                     if (clickedBlock === 'crafting_table') { craftingMode = 3; isInventoryOpen = true; controls.unlock(); return; }
+                    if (clickedBlock === 'furnace') { craftingMode = 4; isInventoryOpen = true; controls.unlock(); return; }
                     if (clickedBlock === 'bed') {
                         spawnPoint = new THREE.Vector3(cbx, cby + 1, cbz);
                         let cycleTime = worldTime % CYCLE_LENGTH;
@@ -1337,7 +1416,37 @@ made by SHANMAO2022
                 for (let i = particles.length - 1; i >= 0; i--) { const p = particles[i]; p.life -= delta; p.mesh.position.addScaledVector(p.vel, delta); p.mesh.scale.setScalar(p.life); if (p.life <= 0) { scene.remove(p.mesh); particles.splice(i, 1); } }
                 if (currentDimension === 'overworld') { pigSpawnTimer += delta; if (pigSpawnTimer > 5 && !isNight && entities.filter(e=>e.type==='pig').length < 15) { pigSpawnTimer = 0; const angle = Math.random()*Math.PI*2; const r = 10+Math.random()*15; const sx = camera.position.x+Math.cos(angle)*r; const sz = camera.position.z+Math.sin(angle)*r; const sSurfaceY = Math.floor(noise2D(sx*0.04, sz*0.04)*5); if (worldBlocks.has(`${Math.floor(sx)},${sSurfaceY},${Math.floor(sz)}`)) spawnPig(sx, sz, sSurfaceY+1); } zombieSpawnTimer += delta; if (zombieSpawnTimer > 3 && entities.filter(e => e.type === 'zombie' || e.type === 'spider').length < 15) { zombieSpawnTimer = 0; const angle = Math.random()*Math.PI*2; const r = 10+Math.random()*10; const sx = camera.position.x+Math.cos(angle)*r; const sz = camera.position.z+Math.sin(angle)*r; const sSurfaceY = Math.floor(noise2D(sx*0.04, sz*0.04)*5); if (isNight) { if (worldBlocks.has(`${Math.floor(sx)},${sSurfaceY},${Math.floor(sz)}`)) { if (Math.random() < 0.4) spawnSpider(sx, sz, sSurfaceY+1); else spawnZombie(sx, sz, sSurfaceY+1); } } else if (camera.position.y < 0) { const cy = camera.position.y + (Math.random()-0.5)*10; if (!worldBlocks.has(`${Math.floor(sx)},${Math.floor(cy)},${Math.floor(sz)}`) && worldBlocks.has(`${Math.floor(sx)},${Math.floor(cy)-1},${Math.floor(sz)}`)) { if (Math.random() < 0.3) spawnSpider(sx, sz, cy); else spawnZombie(sx, sz, cy); } } } endermanSpawnTimer += delta; if (endermanSpawnTimer > 5 && isNight && entities.filter(e=>e.type==='enderman').length < 3) { endermanSpawnTimer = 0; const angle = Math.random()*Math.PI*2; const r = 15+Math.random()*10; const sx = camera.position.x+Math.cos(angle)*r; const sz = camera.position.z+Math.sin(angle)*r; const sSurfaceY = Math.floor(noise2D(sx*0.04, sz*0.04)*5); if (worldBlocks.has(`${Math.floor(sx)},${sSurfaceY},${Math.floor(sz)}`)) spawnEnderman(sx, sz, sSurfaceY+1); } } 
                 else if (currentDimension === 'nether') { blazeSpawnTimer += delta; if (blazeSpawnTimer > 0.8 && entities.filter(e => e.type === 'blaze' || e.type === 'zombie').length < 40) { blazeSpawnTimer = 0; const angle = Math.random()*Math.PI*2; const r = 10+Math.random()*15; const sx = camera.position.x+Math.cos(angle)*r; const sz = camera.position.z+Math.sin(angle)*r; for (let cy = Math.floor(camera.position.y)+5; cy > Math.floor(camera.position.y)-10; cy--) { if (!getBlock(Math.floor(sx), cy, Math.floor(sz)) && getBlock(Math.floor(sx), cy-1, Math.floor(sz))) { spawnBlaze(sx, sz, cy); break; } } } }
-                else if (currentDimension === 'end') { endermanSpawnTimer += delta; if (endermanSpawnTimer > 2 && entities.filter(e=>e.type==='enderman').length < 25) { endermanSpawnTimer = 0; const angle = Math.random()*Math.PI*2; const r = 10+Math.random()*30; const sx = camera.position.x+Math.cos(angle)*r; const sz = camera.position.z+Math.sin(angle)*r; spawnEnderman(sx, sz, 22); } }
+                if (currentDimension === 'end') { endermanSpawnTimer += delta; if (endermanSpawnTimer > 2 && entities.filter(e=>e.type==='enderman').length < 25) { endermanSpawnTimer = 0; const angle = Math.random()*Math.PI*2; const r = 10+Math.random()*30; const sx = camera.position.x+Math.cos(angle)*r; const sz = camera.position.z+Math.sin(angle)*r; spawnEnderman(sx, sz, 22); } }
+                
+                // 熔炉逻辑
+                const input = invState.furnace[0]; const fuel = invState.furnace[1];
+                const recipes = { iron_ore: 'iron_ingot', gold_ore: 'gold_ingot' };
+                const isSmeltable = input && recipes[input.type];
+                if (furnaceBurnTime > 0) {
+                    furnaceBurnTime -= delta;
+                    if (isSmeltable) {
+                        furnaceSmeltTime += delta;
+                        if (furnaceSmeltTime >= 5.0) {
+                            furnaceSmeltTime = 0;
+                            const resType = recipes[input.type];
+                            if (!invState.output) invState.output = { type: resType, count: 1 };
+                            else if (invState.output.type === resType) invState.output.count++;
+                            input.count--; if (input.count <= 0) invState.furnace[0] = null;
+                        }
+                    } else { furnaceSmeltTime = 0; }
+                } else if (isSmeltable && fuel && fuel.count > 0) {
+                    const fuelVal = ITEMS[fuel.type].fuelValue || (fuel.type === 'planks' || fuel.type === 'log' ? 15 : 0);
+                    if (fuelVal > 0) {
+                        furnaceBurnTime = fuelVal; furnaceMaxBurnTime = fuelVal;
+                        fuel.count--; if (fuel.count <= 0) invState.furnace[1] = null;
+                    }
+                } else { furnaceSmeltTime = 0; }
+                if (isInventoryOpen && craftingMode === 4) {
+                    const progress = document.getElementById('smelt-progress-fill');
+                    if (progress) progress.style.width = (furnaceSmeltTime / 5.0 * 100) + '%';
+                    const flame = document.getElementById('smelt-flame');
+                    if (flame) flame.style.color = furnaceBurnTime > 0 ? '#ffaa00' : '#555';
+                }
             }
 
             let cycleTime = worldTime % CYCLE_LENGTH; let theta; let timeUntilSwitch = 0; let nextPhase = '';
@@ -1357,7 +1466,7 @@ made by SHANMAO2022
             if (playerInvulnTimer > 0) playerInvulnTimer -= delta;
             
             if (controls.isLocked === true && !isInventoryOpen && !isDead && !isGameClear) {
-                updateChunks(); hungerTimer += delta; if (hungerTimer > 10 && gameMode === 1) { hungerTimer = 0; if (currentHunger > 0) { currentHunger = Math.max(0, currentHunger - 0.5); updateStatusUI(); } }
+                updateChunks(); hungerTimer += delta; if (hungerTimer > 30 && gameMode === 1) { hungerTimer = 0; if (currentHunger > 0) { currentHunger = Math.max(0, currentHunger - 0.5); updateStatusUI(); } }
                 if (currentHunger >= 18 && currentHealth < 20) { healTimer += delta; if (healTimer > 4) { healTimer = 0; currentHealth++; updateStatusUI(); } } else healTimer = 0;
                 if (currentHunger <= 0) { starveTimer += delta; if (starveTimer > 4) { starveTimer = 0; takeDamage(1); } } else starveTimer = 0;
                 let speedMult = 1.0; if (isPlayerInWater) speedMult = 0.5; if (isPlayerInLava) { speedMult = 0.3; if (playerInvulnTimer <= 0) takeDamage(2); }
@@ -1366,7 +1475,7 @@ made by SHANMAO2022
                 else { if (isPlayerInWater || isPlayerInLava) { velocity.y -= 5.0 * delta; if (velocity.y < -3.0) velocity.y = -3.0; } else { velocity.y -= 25.0 * delta; } }
                 direction.z = Number(moveForward) - Number(moveBackward); direction.x = Number(moveRight) - Number(moveLeft); direction.normalize(); 
                 const speed = 40.0 * speedMult; if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta; if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
-                if (jumpPressed && !isFlying) { if (canJump) { velocity.y = 8.5; canJump = false; if (currentHunger > 0 && gameMode === 1) { currentHunger = Math.max(0, currentHunger - 0.2); updateStatusUI(); } } else if (isPlayerInWater || isPlayerInLava) { velocity.y += 35.0 * delta; if (velocity.y > 6.0) velocity.y = 6.0; } }
+                if (jumpPressed && !isFlying) { if (canJump) { velocity.y = 8.5; canJump = false; if (currentHunger > 0 && gameMode === 1) { currentHunger = Math.max(0, currentHunger - 0.1); updateStatusUI(); } } else if (isPlayerInWater || isPlayerInLava) { velocity.y += 35.0 * delta; if (velocity.y > 6.0) velocity.y = 6.0; } }
                 const camObj = controls.getObject(); const oldPos = camObj.position.clone(); camObj.position.copy(oldPos); controls.moveRight(-velocity.x * delta); controls.moveForward(-velocity.z * delta); const totalDx = camObj.position.x - oldPos.x; const totalDz = camObj.position.z - oldPos.z;
                 camObj.position.copy(oldPos); if (velocity.y < 0 && !checkCollisionGeneric(camObj.position.x, camObj.position.y - 1.55, camObj.position.z, 0.28, 1.7)) { highestY = Math.max(highestY, camObj.position.y); isFalling = true; } else if (velocity.y > 0) { highestY = camObj.position.y; isFalling = false; }
                 camObj.position.y += velocity.y * delta;
@@ -1404,7 +1513,13 @@ made by SHANMAO2022
                             if (miningTime >= requiredTime) { 
                                 let drops = false; if (blockDef.tool === 'none' || (toolDef && toolDef.toolType === blockDef.tool && toolDef.tier >= blockDef.tier)) drops = true; 
                                 setBlock(bx, by, bz, null); highlightBox.visible = false; miningOverlay.visible = false; highlightBox.scale.setScalar(1); highlightMat.color.setHex(0x000000); 
-                                if (drops && gameMode === 1) { if (blockType === 'stone' && Math.random() < 0.1) { addBlockToInventory('flint'); addBlockToInventory('stone'); } else addBlockToInventory(blockType); } 
+                                if (drops && gameMode === 1) { 
+                                    if (blockType === 'stone' && Math.random() < 0.1) { addBlockToInventory('flint'); addBlockToInventory('stone'); } 
+                                    else if (blockType === 'coal_ore') addBlockToInventory('coal');
+                                    else if (blockType === 'diamond_ore') addBlockToInventory('diamond');
+                                    else if (blockType === 'bed_head' || blockType === 'bed_foot') { addBlockToInventory('bed'); } 
+                                    else addBlockToInventory(blockType); 
+                                } 
                                 renderInventoryUI(); isMining = false; miningTime = 0; targetBlockKey = null; 
                             } 
                         } 

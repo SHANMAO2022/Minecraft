@@ -61,7 +61,7 @@
     <div id="inventory-ui">
         <div class="inventory-top">
             <div class="crafting-area">
-                <div>
+                <div id="crafting-box">
                     <div class="inv-section-title" id="crafting-title">合成 (2x2)</div>
                     <div class="crafting-grid size-2" id="crafting-grid">
                         <div class="slot" data-container="crafting" data-index="0"></div>
@@ -73,6 +73,18 @@
                         <div class="slot" data-container="crafting" data-index="6" style="display:none;"></div>
                         <div class="slot" data-container="crafting" data-index="7" style="display:none;"></div>
                         <div class="slot" data-container="crafting" data-index="8" style="display:none;"></div>
+                    </div>
+                </div>
+                <div id="furnace-box" style="display:none; flex-direction: row; align-items: center; gap: 15px;">
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <div class="inv-section-title">燃料/原料</div>
+                        <div class="slot" data-container="furnace" data-index="0" id="furnace-input"></div>
+                        <div id="smelt-flame" style="text-align: center; font-size: 20px; color: #555;">🔥</div>
+                        <div class="slot" data-container="furnace" data-index="1" id="furnace-fuel"></div>
+                    </div>
+                    <div id="smelt-progress-container" style="width: 30px; height: 10px; background: #555; position: relative;">
+                        <div id="smelt-progress-fill" style="width: 0%; height: 100%; background: #ffff55;"></div>
+                        <div style="position: absolute; top: -15px; left: 0; width: 100%; text-align: center; font-size: 14px;">➜</div>
                     </div>
                 </div>
                 <div class="crafting-arrow">➜</div>

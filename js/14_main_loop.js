@@ -41,6 +41,36 @@
                 }
                 for (let i = particles.length - 1; i >= 0; i--) { const p = particles[i]; p.life -= delta; p.mesh.position.addScaledVector(p.vel, delta); p.mesh.scale.setScalar(p.life); if (p.life <= 0) { scene.remove(p.mesh); particles.splice(i, 1); } }
                 handleMobSpawning(delta, isNight);
+
+                // 熔炉逻辑
+                const input = invState.furnace[0]; const fuel = invState.furnace[1];
+                const recipes = { iron_ore: 'iron_ingot', gold_ore: 'gold_ingot' };
+                const isSmeltable = input && recipes[input.type];
+                if (furnaceBurnTime > 0) {
+                    furnaceBurnTime -= delta;
+                    if (isSmeltable) {
+                        furnaceSmeltTime += delta;
+                        if (furnaceSmeltTime >= 5.0) {
+                            furnaceSmeltTime = 0;
+                            const resType = recipes[input.type];
+                            if (!invState.output) invState.output = { type: resType, count: 1 };
+                            else if (invState.output.type === resType) invState.output.count++;
+                            input.count--; if (input.count <= 0) invState.furnace[0] = null;
+                        }
+                    } else { furnaceSmeltTime = 0; }
+                } else if (isSmeltable && fuel && fuel.count > 0) {
+                    const fuelVal = ITEMS[fuel.type].fuelValue || (fuel.type === 'planks' || fuel.type === 'log' ? 15 : 0);
+                    if (fuelVal > 0) {
+                        furnaceBurnTime = fuelVal; furnaceMaxBurnTime = fuelVal;
+                        fuel.count--; if (fuel.count <= 0) invState.furnace[1] = null;
+                    }
+                } else { furnaceSmeltTime = 0; }
+                if (isInventoryOpen && craftingMode === 4) {
+                    const progress = document.getElementById('smelt-progress-fill');
+                    if (progress) progress.style.width = (furnaceSmeltTime / 5.0 * 100) + '%';
+                    const flame = document.getElementById('smelt-flame');
+                    if (flame) flame.style.color = furnaceBurnTime > 0 ? '#ffaa00' : '#555';
+                }
             }
 
             let cycleTime = worldTime % CYCLE_LENGTH; let theta; let timeUntilSwitch = 0; let nextPhase = '';
@@ -70,7 +100,7 @@
             if (playerInvulnTimer > 0) playerInvulnTimer -= dt;
 
             if (controls.isLocked === true && !isInventoryOpen && !isDead && !isGameClear) {
-                updateChunks(); hungerTimer += dt; if (hungerTimer > 10 && gameMode === 1) { hungerTimer = 0; if (currentHunger > 0) { currentHunger = Math.max(0, currentHunger - 0.5); updateStatusUI(); } }
+                updateChunks(); hungerTimer += dt; if (hungerTimer > 30 && gameMode === 1) { hungerTimer = 0; if (currentHunger > 0) { currentHunger = Math.max(0, currentHunger - 0.5); updateStatusUI(); } }
                 if (currentHunger >= 18 && currentHealth < 20) { healTimer += dt; if (healTimer > 4) { healTimer = 0; currentHealth++; updateStatusUI(); } } else healTimer = 0;
                 if (currentHunger <= 0) { starveTimer += dt; if (starveTimer > 4) { starveTimer = 0; takeDamage(1); } } else starveTimer = 0;
                 let speedMult = 1.0; if (isPlayerInWater) speedMult = 0.5; if (isPlayerInLava) { speedMult = 0.3; if (playerInvulnTimer <= 0) takeDamage(2); }
@@ -79,7 +109,7 @@
                 else { if (isPlayerInWater || isPlayerInLava) { velocity.y -= 5.0 * dt; if (velocity.y < -3.0) velocity.y = -3.0; } else { velocity.y -= 25.0 * dt; } }
                 direction.z = Number(moveForward) - Number(moveBackward); direction.x = Number(moveRight) - Number(moveLeft); direction.normalize();
                 const speed = 40.0 * speedMult; if (moveForward || moveBackward) velocity.z -= direction.z * speed * dt; if (moveLeft || moveRight) velocity.x -= direction.x * speed * dt;
-                if (jumpPressed && !isFlying) { if (canJump) { velocity.y = 8.5; canJump = false; if (currentHunger > 0 && gameMode === 1) { currentHunger = Math.max(0, currentHunger - 0.2); updateStatusUI(); } } else if (isPlayerInWater || isPlayerInLava) { velocity.y += 35.0 * dt; if (velocity.y > 6.0) velocity.y = 6.0; } }
+                if (jumpPressed && !isFlying) { if (canJump) { velocity.y = 8.5; canJump = false; if (currentHunger > 0 && gameMode === 1) { currentHunger = Math.max(0, currentHunger - 0.1); updateStatusUI(); } } else if (isPlayerInWater || isPlayerInLava) { velocity.y += 35.0 * dt; if (velocity.y > 6.0) velocity.y = 6.0; } }
                 const camObj = controls.getObject(); const oldPos = camObj.position.clone(); camObj.position.copy(oldPos); controls.moveRight(-velocity.x * dt); controls.moveForward(-velocity.z * dt); const totalDx = camObj.position.x - oldPos.x; const totalDz = camObj.position.z - oldPos.z;
                 camObj.position.copy(oldPos); if (velocity.y < 0 && !checkCollisionGeneric(camObj.position.x, camObj.position.y - 1.55, camObj.position.z, 0.28, 1.7)) { highestY = Math.max(highestY, camObj.position.y); isFalling = true; } else if (velocity.y > 0) { highestY = camObj.position.y; isFalling = false; }
                 camObj.position.y += velocity.y * dt;
@@ -119,7 +149,13 @@
                                 setBlock(bx, by, bz, null); 
                                 if (blockType === 'bed_head' || blockType === 'bed_foot') { const targetType = blockType === 'bed_head' ? 'bed_foot' : 'bed_head'; const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]; for (let d of dirs) { if (getBlock(bx + d[0], by, bz + d[1]) === targetType) { setBlock(bx + d[0], by, bz + d[1], null); break; } } }
                                 highlightBox.visible = false; miningOverlay.visible = false; highlightBox.scale.setScalar(1); 
-                                if (drops && gameMode === 1) { if (blockType === 'bed_head' || blockType === 'bed_foot') { addBlockToInventory('bed'); } else addBlockToInventory(blockType); } 
+                                if (drops && gameMode === 1) { 
+                                    if (blockType === 'stone' && Math.random() < 0.1) { addBlockToInventory('flint'); addBlockToInventory('stone'); } 
+                                    else if (blockType === 'coal_ore') addBlockToInventory('coal');
+                                    else if (blockType === 'diamond_ore') addBlockToInventory('diamond');
+                                    else if (blockType === 'bed_head' || blockType === 'bed_foot') { addBlockToInventory('bed'); } 
+                                    else addBlockToInventory(blockType); 
+                                } 
                                 renderInventoryUI(); isMining = false; miningTime = 0; targetBlockKey = null; 
                             } 
                         } 

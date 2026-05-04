@@ -31,6 +31,7 @@
                     const cbx = Math.floor(p.x); const cby = Math.floor(p.y); const cbz = Math.floor(p.z);
                     const clickedBlock = getBlock(cbx, cby, cbz);
                     if (clickedBlock === 'crafting_table') { craftingMode = 3; isInventoryOpen = true; controls.unlock(); return; }
+                    if (clickedBlock === 'furnace') { craftingMode = 4; isInventoryOpen = true; controls.unlock(); return; }
                     if (clickedBlock === 'bed' || clickedBlock === 'bed_head' || clickedBlock === 'bed_foot') {
                         spawnPoint = new THREE.Vector3(cbx, cby + 1, cbz);
                         let cycleTime = worldTime % CYCLE_LENGTH;

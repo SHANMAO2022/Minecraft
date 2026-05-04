@@ -5,7 +5,7 @@
 
         function updateStatusUI() {
             healthBarEl.innerHTML = ''; for (let i = 0; i < 10; i++) healthBarEl.innerHTML += (i < Math.ceil(currentHealth / 2)) ? '❤️' : '🖤';
-            hungerBarEl.innerHTML = ''; for (let i = 0; i < 10; i++) hungerBarEl.innerHTML += (i < Math.ceil(currentHunger / 2)) ? '🍗' : '🦴';
+            hungerBarEl.innerHTML = ''; for (let i = 0; i < 10; i++) hungerBarEl.innerHTML += (i >= 10 - Math.ceil(currentHunger / 2)) ? '🍗' : '🦴'; // Deplete from left to right
             document.getElementById('status-bars').style.opacity = (gameMode === 0) ? '0' : '1';
         }
 
