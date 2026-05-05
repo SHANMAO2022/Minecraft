@@ -55,7 +55,14 @@
                     const cbx = Math.floor(p.x); const cby = Math.floor(p.y); const cbz = Math.floor(p.z);
                     const clickedBlock = getBlock(cbx, cby, cbz);
                     if (clickedBlock === 'crafting_table') { craftingMode = 3; isInventoryOpen = true; controls.unlock(); return; }
-                    if (clickedBlock === 'furnace') { craftingMode = 4; isInventoryOpen = true; controls.unlock(); return; }
+                    if (clickedBlock === 'furnace') { 
+                        craftingMode = 4; isInventoryOpen = true; 
+                        currentFurnacePos = `${cbx},${cby},${cbz}`;
+                        if (!furnaceStates[currentFurnacePos]) furnaceStates[currentFurnacePos] = { items: new Array(2).fill(null), smelt: 0, burn: 0, maxBurn: 0, output: null };
+                        invState.furnace = furnaceStates[currentFurnacePos].items;
+                        invState.output = furnaceStates[currentFurnacePos].output;
+                        controls.unlock(); return; 
+                    }
                     if (clickedBlock === 'bed' || clickedBlock === 'bed_head' || clickedBlock === 'bed_foot') {
                         spawnPoint = new THREE.Vector3(cbx, cby + 1, cbz);
                         let cycleTime = worldTime % CYCLE_LENGTH;
@@ -154,7 +161,21 @@
                         let dmg = (gameMode === 0) ? 999 : 2; hitMob.hp -= dmg;
                         hitMob.mesh.children.forEach(c => { if (c.material && c.material.emissive) c.material.emissive.setHex(0xaa0000); });
                         if (hitMob.type === 'enderman') { if (hitMob.onHit) hitMob.onHit(); } else if (hitMob.type === 'crystal') { hitMob.hp = 0; } else if (hitMob.type !== 'dragon') { const kb = new THREE.Vector3().subVectors(hitMob.mesh.position, camera.position).normalize(); if (hitMob.type === 'pig') { hitMob.target.copy(hitMob.mesh.position).addScaledVector(kb, 3); hitMob.state = 'wander'; hitMob.timer = 2; } else { hitMob.mesh.position.addScaledVector(kb, 1); } }
-                        if (hitMob.hp <= 0 && hitMob.type !== 'dragon' && hitMob.type !== 'crystal') { scene.remove(hitMob.mesh); entities.splice(entities.indexOf(hitMob), 1); if (hitMob.type === 'pig' && gameMode === 1) addBlockToInventory('raw_porkchop', 1); else if (hitMob.type === 'zombie' && gameMode === 1) addBlockToInventory('rotten_flesh', 1); else if (hitMob.type === 'enderman' && gameMode === 1) addBlockToInventory('ender_pearl', 1); else if (hitMob.type === 'blaze' && gameMode === 1) addBlockToInventory('blaze_rod', Math.floor(Math.random() * 2) + 2); else if (hitMob.type === 'spider' && gameMode === 1) addBlockToInventory('string', Math.floor(Math.random() * 2) + 5); renderInventoryUI(); } return;
+                        if (hitMob.hp <= 0 && hitMob.type !== 'dragon' && hitMob.type !== 'crystal') { 
+                            // 掉落经验球
+                            const xpValue = hitMob.type === 'pig' || hitMob.type === 'cow' ? 2 : 5;
+                            if (window.spawnXPOrb) {
+                                for(let i=0; i<xpValue * 4; i++) window.spawnXPOrb(hitMob.mesh.position.x, hitMob.mesh.position.y, hitMob.mesh.position.z, 2);
+                            }
+                            scene.remove(hitMob.mesh); entities.splice(entities.indexOf(hitMob), 1); 
+                            if (hitMob.type === 'pig' && gameMode === 1) addBlockToInventory('raw_porkchop', 1); 
+                            else if (hitMob.type === 'cow' && gameMode === 1) addBlockToInventory('raw_beef', 1);
+                            else if (hitMob.type === 'zombie' && gameMode === 1) addBlockToInventory('rotten_flesh', 1); 
+                            else if (hitMob.type === 'enderman' && gameMode === 1) addBlockToInventory('ender_pearl', 1); 
+                            else if (hitMob.type === 'blaze' && gameMode === 1) addBlockToInventory('blaze_rod', Math.floor(Math.random() * 2) + 2); 
+                            else if (hitMob.type === 'spider' && gameMode === 1) addBlockToInventory('string', Math.floor(Math.random() * 2) + 5); 
+                            renderInventoryUI(); 
+                        } return;
                     }
                     const p = intersect.point.clone().sub(intersect.face.normal.clone().multiplyScalar(0.01)); const bx = Math.floor(p.x); const by = Math.floor(p.y); const bz = Math.floor(p.z); const bt = getBlock(bx, by, bz); if (bt === 'end_portal' || bt === 'nether_portal' || bt === 'return_portal' || bt === 'end_portal_frame_empty') return;
                     isMining = true; miningTime = 0;
@@ -201,4 +222,10 @@
                 } 
             } return false; 
         }
+        // 修复：点击回到游戏按钮时显式锁定鼠标并关闭 UI
+        document.getElementById('btn-resume').addEventListener('click', () => {
+            pauseScreen.style.display = 'none';
+            uiLayer.style.display = 'none';
+            controls.lock();
+        });
         // ==========================================

@@ -94,15 +94,21 @@ function removeNetworkPlayer(id) {
 }
 
 // 事件监听与原有联机逻辑保持一致，但修复了加入时的延迟
-document.getElementById('btn-singleplayer').addEventListener('click', () => { titleScreen.style.display = 'none'; worldSelectScreen.style.display = 'flex'; renderWorldList(); });
+document.getElementById('btn-singleplayer').addEventListener('click', async () => { titleScreen.style.display = 'none'; worldSelectScreen.style.display = 'flex'; await renderWorldList(); });
 document.getElementById('btn-world-back').addEventListener('click', () => { worldSelectScreen.style.display = 'none'; titleScreen.style.display = 'flex'; });
 document.getElementById('btn-goto-create').addEventListener('click', () => { worldSelectScreen.style.display = 'none'; createWorldScreen.style.display = 'flex'; });
 document.getElementById('btn-cancel-create').addEventListener('click', () => { createWorldScreen.style.display = 'none'; worldSelectScreen.style.display = 'flex'; });
 document.getElementById('btn-toggle-mode').addEventListener('click', (e) => { pendingCreateMode = pendingCreateMode === 1 ? 0 : 1; e.target.innerText = `游戏模式: ${pendingCreateMode === 1 ? '生存' : '创造'}`; });
 document.getElementById('btn-confirm-create').addEventListener('click', () => { const seedStr = document.getElementById('seed-input').value.trim(); startNewGame(seedStr, pendingCreateMode); });
-document.getElementById('btn-play-world').addEventListener('click', () => { if (isWorldSelected) loadGame(); });
-document.getElementById('btn-delete-world').addEventListener('click', () => { if (isWorldSelected) { localStorage.removeItem('mc_player'); localStorage.removeItem('mc_mods'); renderWorldList(); } });
-document.getElementById('btn-resume').addEventListener('click', () => { uiLayer.style.display = 'none'; pauseScreen.style.display = 'none'; controls.lock(); });
+document.getElementById('btn-play-world').addEventListener('click', async () => { if (isWorldSelected) await loadGame(); });
+document.getElementById('btn-delete-world').addEventListener('click', async () => { 
+    if (isWorldSelected) { 
+        if (confirm('确定要删除这个世界吗？此操作无法撤销。')) {
+            await fetch('/api/delete?filename=world.json');
+            await renderWorldList(); 
+        }
+    } 
+});
 document.getElementById('btn-save-quit').addEventListener('click', () => { saveGame(); isPlaying = false; pauseScreen.style.display = 'none'; titleScreen.style.display = 'flex'; });
 
 document.getElementById('btn-options-title').addEventListener('click', () => { titleScreen.style.display = 'none'; document.getElementById('options-screen').style.display = 'flex'; document.getElementById('player-name-input').value = localStorage.getItem('mc_playerName') || 'Player'; });

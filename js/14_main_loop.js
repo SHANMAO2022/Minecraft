@@ -1,5 +1,5 @@
         // ==========================================
-        const velocity = new THREE.Vector3(); const direction = new THREE.Vector3(); const clock = new THREE.Clock(); let worldTime = 0; let portalTimer = 0;
+        const velocity = new THREE.Vector3(); const direction = new THREE.Vector3(); const clock = new THREE.Clock(); let portalTimer = 0; let autoSaveTimer = 0;
         let renderFrames = 0; let lastFpsTime = performance.now();
         const fpsDisplay = document.getElementById('fps-display'); const coordsDisplay = document.getElementById('coords-display'); const timeDisplay = document.getElementById('time-display');
 
@@ -13,6 +13,14 @@
 
             if (isGameRunning) {
                 worldTime += delta;
+                autoSaveTimer += delta;
+                if (autoSaveTimer > 60) {
+                    autoSaveTimer = 0;
+                    if (typeof saveGame === 'function') {
+                        saveGame();
+                        console.log("自动保存成功");
+                    }
+                }
                 if (gameStartTime < 3.0) gameStartTime += delta;
 
                 if (myPeer && performance.now() - lastSyncTime > 100) {
@@ -43,33 +51,40 @@
                 handleMobSpawning(delta, isNight);
 
                 // 熔炉逻辑
-                const input = invState.furnace[0]; const fuel = invState.furnace[1];
-                const recipes = { iron_ore: 'iron_ingot', gold_ore: 'gold_ingot', raw_porkchop: 'cooked_porkchop' };
-                const isSmeltable = input && recipes[input.type];
-                if (furnaceBurnTime > 0) {
-                    furnaceBurnTime -= delta;
-                    if (isSmeltable) {
-                        furnaceSmeltTime += delta;
-                        if (furnaceSmeltTime >= 5.0) {
-                            furnaceSmeltTime = 0;
-                            const resType = recipes[input.type];
-                            if (!invState.output) invState.output = { type: resType, count: 1 };
-                            else if (invState.output.type === resType) invState.output.count++;
-                            input.count--; if (input.count <= 0) invState.furnace[0] = null;
+                for (const pos in furnaceStates) {
+                    const fState = furnaceStates[pos];
+                    const input = fState.items[0]; const fuel = fState.items[1];
+                    const recipes = { iron_ore: 'iron_ingot', gold_ore: 'gold_ingot', raw_porkchop: 'cooked_porkchop', raw_beef: 'cooked_beef' };
+                    const isSmeltable = input && recipes[input.type];
+                    
+                    if (fState.burn > 0) {
+                        fState.burn -= delta;
+                        if (isSmeltable) {
+                            fState.smelt += delta;
+                            if (fState.smelt >= 5.0) {
+                                fState.smelt = 0;
+                                const resType = recipes[input.type];
+                                if (!fState.output) fState.output = { type: resType, count: 1 };
+                                else if (fState.output.type === resType) fState.output.count++;
+                                input.count--; if (input.count <= 0) fState.items[0] = null;
+                            }
+                        } else { fState.smelt = 0; }
+                    } else if (isSmeltable && fuel && fuel.count > 0) {
+                        const fuelVal = ITEMS[fuel.type].fuelValue || (fuel.type === 'planks' || fuel.type === 'log' ? 15 : 0);
+                        if (fuelVal > 0) {
+                            fState.burn = fuelVal; fState.maxBurn = fuelVal;
+                            fuel.count--; if (fuel.count <= 0) fState.items[1] = null;
                         }
-                    } else { furnaceSmeltTime = 0; }
-                } else if (isSmeltable && fuel && fuel.count > 0) {
-                    const fuelVal = ITEMS[fuel.type].fuelValue || (fuel.type === 'planks' || fuel.type === 'log' ? 15 : 0);
-                    if (fuelVal > 0) {
-                        furnaceBurnTime = fuelVal; furnaceMaxBurnTime = fuelVal;
-                        fuel.count--; if (fuel.count <= 0) invState.furnace[1] = null;
+                    } else { fState.smelt = 0; }
+
+                    // 如果当前打开的是这个熔炉，更新 UI 和全局状态
+                    if (isInventoryOpen && craftingMode === 4 && currentFurnacePos === pos) {
+                        invState.output = fState.output;
+                        const progress = document.getElementById('smelt-progress-fill');
+                        if (progress) progress.style.width = (fState.smelt / 5.0 * 100) + '%';
+                        const flame = document.getElementById('smelt-flame');
+                        if (flame) flame.style.color = fState.burn > 0 ? '#ffaa00' : '#555';
                     }
-                } else { furnaceSmeltTime = 0; }
-                if (isInventoryOpen && craftingMode === 4) {
-                    const progress = document.getElementById('smelt-progress-fill');
-                    if (progress) progress.style.width = (furnaceSmeltTime / 5.0 * 100) + '%';
-                    const flame = document.getElementById('smelt-flame');
-                    if (flame) flame.style.color = furnaceBurnTime > 0 ? '#ffaa00' : '#555';
                 }
             }
 
@@ -212,4 +227,5 @@
         }
 
         window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+        window.addEventListener('beforeunload', () => { if (isPlaying && typeof saveGame === 'function') saveGame(); });
         animate();

@@ -9,7 +9,7 @@
             golden_helmet: "金头盔", golden_chestplate: "金胸甲", golden_leggings: "金护腿", golden_boots: "金靴子",
             diamond_helmet: "钻石头盔", diamond_chestplate: "钻石胸甲", diamond_leggings: "钻石护腿", diamond_boots: "钻石靴子",
             iron_ingot: "铁锭", gold_ingot: "金锭", coal: "煤炭", diamond: "钻石",
-            raw_porkchop: "生猪排", cooked_porkchop: "熟猪排", raw_beef: "生牛肉", cooked_beef: "熟牛排", leather: "皮革", rotten_flesh: "腐肉", flint_and_steel: "打火石", ender_pearl: "末影珍珠", blaze_powder: "烈焰粉", ender_eye: "末影之眼", blaze_rod: "烈焰棒", bow: "弓", arrow: "箭", stick: "木棍", string: "线", flint: "燧石", torch: "火把", bed: "床", bed_head: "床头", bed_foot: "床尾", chest: "箱子", door: "木门"
+            raw_porkchop: "生猪排", cooked_porkchop: "熟猪排", raw_beef: "生牛排", cooked_beef: "熟牛排", leather: "皮革", rotten_flesh: "腐肉", flint_and_steel: "打火石", ender_pearl: "末影珍珠", blaze_powder: "烈焰粉", ender_eye: "末影之眼", blaze_rod: "烈焰棒", bow: "弓", arrow: "箭", stick: "木棍", string: "线", flint: "燧石", torch: "火把", bed: "床", bed_head: "床头", bed_foot: "床尾", chest: "箱子", door: "木门"
         };
 
         const ITEMS = {

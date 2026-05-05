@@ -1,0 +1,106 @@
+{
+    "mods": {
+        "overworld": {
+            "-7,4,-14": "null",
+            "-8,1,-29": "null",
+            "1,5,-30": "null",
+            "2,5,-30": "tall_grass",
+            "0,0,1": "null",
+            "-1,1,1": "null"
+        },
+        "nether": {},
+        "end": {}
+    },
+    "chests": {},
+    "furnaces": {},
+    "player": {
+        "x": -10.725103334596927,
+        "y": 3.55,
+        "z": 10.502335210668631,
+        "dim": "overworld",
+        "hp": 20,
+        "hunger": 18.999999999999986,
+        "mode": 1,
+        "xp": 0,
+        "level": 0,
+        "worldTime": 24.43230000000449,
+        "inv": {
+            "hotbar": [
+                {
+                    "type": "obsidian",
+                    "count": 10
+                },
+                {
+                    "type": "bed",
+                    "count": 1
+                },
+                {
+                    "type": "sand",
+                    "count": 1
+                },
+                {
+                    "type": "grass",
+                    "count": 1
+                },
+                null,
+                null,
+                null,
+                null,
+                null
+            ],
+            "main": [
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+            ],
+            "armor": [
+                null,
+                null,
+                null,
+                null
+            ]
+        }
+    }
+}

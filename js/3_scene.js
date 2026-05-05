@@ -5,15 +5,17 @@
             end: { chunks: new Map(), worldBlocks: new Set(), entities: [], playerPos: null }
         };
 
-        let currentDimension = 'overworld';
-        let chunks = dimensionState.overworld.chunks; let worldBlocks = dimensionState.overworld.worldBlocks; let entities = dimensionState.overworld.entities;
-
-        const scene = new THREE.Scene(); scene.background = new THREE.Color(0x87CEEB); scene.fog = new THREE.Fog(0x87CEEB, 40, 80);
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000); camera.position.set(0, 20, 0);
-        let spawnPoint = null;
-
-        const heldItemGroup = new THREE.Group(); heldItemGroup.position.set(0.4, -0.4, -0.6); camera.add(heldItemGroup); scene.add(camera);
-        const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setSize(window.innerWidth, window.innerHeight); renderer.setPixelRatio(window.devicePixelRatio); document.body.appendChild(renderer.domElement);
+        var currentDimension = 'overworld';
+        var chunks = dimensionState.overworld.chunks; 
+        var worldBlocks = dimensionState.overworld.worldBlocks; 
+        var entities = dimensionState.overworld.entities;
+        
+        var scene = new THREE.Scene(); scene.background = new THREE.Color(0x87CEEB); scene.fog = new THREE.Fog(0x87CEEB, 40, 80);
+        var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000); camera.position.set(0, 20, 0);
+        var spawnPoint = null;
+        
+        var heldItemGroup = new THREE.Group(); heldItemGroup.position.set(0.4, -0.4, -0.6); camera.add(heldItemGroup); scene.add(camera);
+        var renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setSize(window.innerWidth, window.innerHeight); renderer.setPixelRatio(window.devicePixelRatio); document.body.appendChild(renderer.domElement);
 
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); scene.add(ambientLight);
         const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); scene.add(directionalLight);

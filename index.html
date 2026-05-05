@@ -34,18 +34,22 @@
         </div>
     </div>
 
-    <div id="status-bars" style="position: absolute; bottom: 85px; left: 50%; transform: translateX(-50%); width: 496px; display: none; z-index: 5; flex-direction: column;">
-        <div style="display: flex; justify-content: space-between; align-items: flex-end; width: 100%;">
-            <!-- 左侧：护甲和生命值堆叠 -->
-            <div style="display: flex; flex-direction: column; align-items: flex-start;">
-                <div id="armor-bar" style="height: 24px; font-size: 20px; line-height: 24px; text-shadow: 2px 2px 0 #000; display: flex; flex-direction: row; gap: 0px;"></div>
-                <div id="health-bar" style="height: 24px; font-size: 20px; line-height: 24px; text-shadow: 2px 2px 0 #000; display: flex; flex-direction: row; gap: 0px;">❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️</div>
-            </div>
+    <div id="status-bars" class="status-container" style="bottom: 105px;">
+        <!-- 护甲单独一行，位于生命值上方 -->
+        <div id="armor-bar" class="status-bar-row armor-row"></div>
+        <div class="status-bar-row main-status-row">
+            <!-- 左侧：生命值 -->
+            <div id="health-bar" class="status-item">❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️</div>
             <!-- 右侧：饥饿值 -->
-            <div style="display: flex; flex-direction: column; align-items: flex-end;">
-                <div id="hunger-bar" style="height: 24px; font-size: 20px; line-height: 24px; text-shadow: 2px 2px 0 #000; display: flex; flex-direction: row; gap: 0px;">🍗🍗🍗🍗🍗🍗🍗🍗🍗🍗</div>
-            </div>
+            <div id="hunger-bar" class="status-item">🍗🍗🍗🍗🍗🍗🍗🍗🍗🍗</div>
         </div>
+    </div>
+
+    <div id="xp-container">
+        <div id="xp-bar-bg">
+            <div id="xp-bar-fill"></div>
+        </div>
+        <div id="xp-level">0</div>
     </div>
 
     <div id="death-screen">

@@ -1,9 +1,29 @@
         // ==========================================
+// ==========================================
         let currentHealth = 20; let currentHunger = 20; let isDead = false;
+        // currentXP and currentLevel are now in globals.js
         const healthBarEl = document.getElementById('health-bar'); const hungerBarEl = document.getElementById('hunger-bar'); const armorBarEl = document.getElementById('armor-bar'); const deathScreenEl = document.getElementById('death-screen');
+        const xpContainerEl = document.getElementById('xp-container'); const xpFillEl = document.getElementById('xp-bar-fill'); const xpLevelEl = document.getElementById('xp-level');
         const tooltipEl = document.getElementById('item-tooltip');
 
-        function updateStatusUI() {
+        var addXP = function (amount) {
+            window.currentXP += amount;
+            while (true) {
+                const xpRequired = 100 + window.currentLevel * 50;
+                if (window.currentXP >= xpRequired) {
+                    window.currentXP -= xpRequired;
+                    window.currentLevel++;
+                    console.log("Leveled Up! Current Level: " + window.currentLevel);
+                } else {
+                    break;
+                }
+            }
+            updateStatusUI();
+            if (typeof saveGame === 'function') saveGame();
+        };
+        window.addXP = addXP;
+
+        var updateStatusUI = function() {
             let healthHtml = '';
             for (let i = 0; i < 10; i++) {
                 let h = currentHealth - i * 2;
@@ -12,7 +32,7 @@
                 else healthHtml += '🖤';
             }
             healthBarEl.innerHTML = healthHtml;
-            hungerBarEl.innerHTML = ''; for (let i = 0; i < 10; i++) hungerBarEl.innerHTML += (i >= 10 - Math.ceil(currentHunger / 2)) ? '🍗' : '🦴'; // Deplete from left to right
+            hungerBarEl.innerHTML = ''; for (let i = 0; i < 10; i++) hungerBarEl.innerHTML += (i >= 10 - Math.ceil(currentHunger / 2)) ? '🍗' : '🦴';
             
             // 计算护甲值
             let totalArmorValue = 0;
@@ -32,8 +52,25 @@
                 armorBarEl.style.display = 'none';
             }
 
+            // 更新经验条
+            if (xpContainerEl) {
+                if (gameMode === 1) {
+                    xpContainerEl.style.display = 'flex';
+                    const xpRequired = 100 + window.currentLevel * 50;
+                    const percent = Math.min(100, (window.currentXP / xpRequired) * 100);
+                    if (xpFillEl) xpFillEl.style.width = percent + '%';
+                    if (xpLevelEl) xpLevelEl.innerText = window.currentLevel > 0 ? window.currentLevel : '';
+                } else {
+                    xpContainerEl.style.display = 'none';
+                }
+                console.log(`XP Update: ${window.currentXP}/${100 + window.currentLevel * 50} (Lvl ${window.currentLevel})`);
+            }
+
             document.getElementById('status-bars').style.opacity = (gameMode === 0) ? '0' : '1';
-        }
+        };
+        window.updateStatusUI = updateStatusUI;
+
+
 
         function takeDamage(amount) {
             if (isDead || playerInvulnTimer > 0 || gameMode === 0) return;
@@ -60,5 +97,8 @@
             isSpawnImmunity = true; playerInvulnTimer = 5.0;
             gameStartTime = 0; jumpPressed = false; isPlaying = true; controls.lock();
         });
+
+        // 初始化 UI
+        setTimeout(() => { if (window.updateStatusUI) window.updateStatusUI(); }, 500);
 
         // ==========================================

@@ -60,7 +60,7 @@
 
         document.addEventListener('mouseout', (e) => { if (e.target.closest('.slot')) tooltipEl.style.display = 'none'; });
 
-        function renderInventoryUI() {
+        window.renderInventoryUI = function() {
             if (creativeToggleBtn) {
                 creativeToggleBtn.style.display = (gameMode === 0) ? 'block' : 'none';
                 creativeToggleBtn.classList.toggle('active', isCreativeTabOpen);
@@ -176,7 +176,8 @@
 
             const outputEl = document.querySelector(`[data-container="output"][data-index="0"]`); if (outputEl) renderSlotEl(outputEl, invState.output);
             if (invState.dragged) { draggedIconEl.style.display = 'block'; renderSlotEl(draggedIconEl, invState.dragged); } else { draggedIconEl.style.display = 'none'; } updateHeldItem3D();
-        }
+        };
+        function renderInventoryUI() { window.renderInventoryUI(); }
 
         function getCraftingPattern() {
             let minX = 3, maxX = -1, minY = 3, maxY = -1;
@@ -186,6 +187,7 @@
         }
 
         function checkCrafting() {
+            if (craftingMode !== 2 && craftingMode !== 3) return;
             const c = invState.crafting; const t = (i) => c[i] ? c[i].type : null; let total = 0; let counts = {};
             for (let i = 0; i < 9; i++) { if (t(i)) { total++; counts[t(i)] = (counts[t(i)] || 0) + 1; } }
             invState.output = null; if (total === 0) return;
@@ -239,7 +241,23 @@
                 if (invState.dragged) { if (!targetSlot) { invState[container][index] = { ...invState.dragged, count: 1 }; invState.dragged.count--; if (invState.dragged.count <= 0) invState.dragged = null; } else if (targetSlot.type === invState.dragged.type && targetSlot.count < 64) { targetSlot.count++; invState.dragged.count--; if (invState.dragged.count <= 0) invState.dragged = null; } }
                 else if (targetSlot) { let half = Math.ceil(targetSlot.count / 2); invState.dragged = { ...targetSlot, count: half }; targetSlot.count -= half; if (targetSlot.count <= 0) invState[container][index] = null; }
             } else {
-                if (container === 'output') { if (invState.output && (!invState.dragged || (invState.dragged.type === invState.output.type && invState.dragged.count + invState.output.count <= 64))) { if (!invState.dragged) invState.dragged = { ...invState.output }; else invState.dragged.count += invState.output.count; for (let i = 0; i < 9; i++) { if (invState.crafting[i]) { invState.crafting[i].count--; if (invState.crafting[i].count <= 0) invState.crafting[i] = null; } } } }
+                if (container === 'output') { 
+                    if (invState.output && (!invState.dragged || (invState.dragged.type === invState.output.type && invState.dragged.count + invState.output.count <= 64))) { 
+                        if (!invState.dragged) invState.dragged = { ...invState.output }; 
+                        else invState.dragged.count += invState.output.count; 
+                        
+                        if (craftingMode === 4) {
+                            // 熔炉输出
+                            if (currentFurnacePos && furnaceStates[currentFurnacePos]) {
+                                furnaceStates[currentFurnacePos].output = null;
+                                invState.output = null;
+                            }
+                        } else {
+                            // 合成台输出
+                            for (let i = 0; i < 9; i++) { if (invState.crafting[i]) { invState.crafting[i].count--; if (invState.crafting[i].count <= 0) invState.crafting[i] = null; } } 
+                        }
+                    } 
+                }
                 else { if (invState.dragged && targetSlot) { if (invState.dragged.type === targetSlot.type && targetSlot.count < 64) { let moveAmount = Math.min(64 - targetSlot.count, invState.dragged.count); targetSlot.count += moveAmount; invState.dragged.count -= moveAmount; if (invState.dragged.count <= 0) invState.dragged = null; } else { if (container === 'chest') { invState.chest[index] = invState.dragged; invState.dragged = targetSlot; } else { invState[container][index] = invState.dragged; invState.dragged = targetSlot; } } } else if (invState.dragged && !targetSlot) { 
                     // 只有 armor 类型的物品可以放入 armor 槽位
                     if (container === 'armor' && (!ITEMS[invState.dragged.type] || ITEMS[invState.dragged.type].type !== 'armor')) return;
@@ -259,12 +277,13 @@
             renderInventoryUI();
         }
 
-        function addBlockToInventory(type, count = 1) {
-            let left = count;
-            for (let i = 0; i < 9 && left > 0; i++) { if (invState.hotbar[i] && invState.hotbar[i].type === type && invState.hotbar[i].count < 64) { let add = Math.min(64 - invState.hotbar[i].count, left); invState.hotbar[i].count += add; left -= add; } }
-            for (let i = 0; i < 9 && left > 0; i++) { if (!invState.hotbar[i]) { invState.hotbar[i] = { type, count: left }; left = 0; } }
-            for (let i = 0; i < 27; i++) { if (invState.main[i] && invState.main[i].type === type && invState.main[i].count < 64) { let add = Math.min(64 - invState.main[i].count, left); invState.main[i].count += add; left -= add; } }
-            for (let i = 0; i < 27; i++) { if (!invState.main[i]) { invState.main[i] = { type, count: left }; left = 0; } }
-        }
+        window.addBlockToInventory = function(type, count = 1) {
+            for (let i = 0; i < 9; i++) { if (invState.hotbar[i] && invState.hotbar[i].type === type) { invState.hotbar[i].count += count; return true; } }
+            for (let i = 0; i < 9; i++) { if (!invState.hotbar[i]) { invState.hotbar[i] = { type: type, count: count }; return true; } }
+            for (let i = 0; i < 27; i++) { if (invState.main[i] && invState.main[i].type === type) { invState.main[i].count += count; return true; } }
+            for (let i = 0; i < 27; i++) { if (!invState.main[i]) { invState.main[i] = { type: type, count: count }; return true; } }
+            return false;
+        };
+        function addBlockToInventory(type, count) { return window.addBlockToInventory(type, count); }
 
         // ==========================================
