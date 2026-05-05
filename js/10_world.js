@@ -27,6 +27,7 @@
                 const geo = typeGeometries[type] || blockGeometry;
                 meshes[type] = new THREE.InstancedMesh(geo, materials[type], maxBlocksPerType[type]); 
                 meshes[type].frustumCulled = false; 
+                if (type === 'glass' || type === 'water' || type === 'lava') meshes[type].renderOrder = 10;
                 counts[type] = 0; 
                 scene.add(meshes[type]);
             }
@@ -35,7 +36,8 @@
                 const posKey = `${bx},${by},${bz}`; 
                 if (blocks.has(posKey)) return; 
                 blocks.set(posKey, type); 
-                if (type !== 'tall_grass' && type !== 'nether_portal' && type !== 'water' && type !== 'lava' && type !== 'end_rod' && type !== 'torch') worldBlocks.add(posKey); 
+                const nonSolid = ['tall_grass', 'nether_portal', 'water', 'lava', 'end_rod', 'torch', 'door_top_open', 'door_bottom_open'];
+                if (!nonSolid.includes(type)) worldBlocks.add(posKey); 
                 dummy.position.set(bx + 0.5, by + 0.5, bz + 0.5); 
                 dummy.updateMatrix(); 
                 meshes[type].setMatrixAt(counts[type]++, dummy.matrix); 

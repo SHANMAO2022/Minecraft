@@ -360,23 +360,8 @@ body {
 
         /* 状态栏宽度 496px 以对齐快捷栏 */
         #status-bars {
-            position: absolute;
-            bottom: 85px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: none;
-            width: 496px;
-            justify-content: space-between;
-            z-index: 5;
-            font-size: 20px;
+            pointer-events: none;
             letter-spacing: -2px;
-            text-shadow: 2px 2px 0 #000;
-            transition: opacity 0.2s;
-        }
-
-        #health-bar,
-        #hunger-bar {
-            white-space: nowrap;
         }
 
         #death-screen {

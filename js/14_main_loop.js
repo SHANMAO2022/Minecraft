@@ -127,7 +127,23 @@
                 else { if (velocity.length() > 1 && canJump && !isFlying) { heldItemGroup.position.y = -0.4 + Math.sin(worldTime * 12) * 0.03; heldItemGroup.position.x = 0.4 + Math.cos(worldTime * 6) * 0.01; } else { heldItemGroup.position.set(0.4, -0.4, -0.6); } heldItemGroup.rotation.set(0, 0, 0); }
                 raycaster.setFromCamera(center, camera); const activeMeshes = []; for (const chunk of chunks.values()) blockTypes.forEach(type => { if (type !== 'water' && type !== 'lava' && chunk.meshes[type].count > 0) activeMeshes.push(chunk.meshes[type]); }); const intersects = raycaster.intersectObjects(activeMeshes);
                 if (intersects.length > 0) {
-                    const intersect = intersects[0]; const p = intersect.point.clone().sub(intersect.face.normal.clone().multiplyScalar(0.1)); const bx = Math.floor(p.x); const by = Math.floor(p.y); const bz = Math.floor(p.z); const key = `${bx},${by},${bz}`; highlightBox.position.set(bx + 0.5, by + 0.5, bz + 0.5); highlightBox.visible = true;
+                    const intersect = intersects[0]; 
+                    const p = intersect.point.clone().sub(intersect.face.normal.clone().multiplyScalar(0.01)); 
+                    const bx = Math.floor(p.x); const by = Math.floor(p.y); const bz = Math.floor(p.z); 
+                    const key = `${bx},${by},${bz}`; 
+                    const blockType = getBlock(bx, by, bz);
+                    
+                    highlightBox.visible = true;
+                    if (blockType === 'door_top' || blockType === 'door_bottom') {
+                        highlightBox.scale.set(1, 1, 0.1);
+                        highlightBox.position.set(bx + 0.5, by + 0.5, bz + 0.5 - 0.45);
+                    } else if (blockType === 'door_top_open' || blockType === 'door_bottom_open') {
+                        highlightBox.scale.set(0.1, 1, 1);
+                        highlightBox.position.set(bx + 0.5 - 0.45, by + 0.5, bz + 0.5);
+                    } else {
+                        highlightBox.scale.set(1, 1, 1);
+                        highlightBox.position.set(bx + 0.5, by + 0.5, bz + 0.5);
+                    }
                     if (isMining) { 
                         if (targetBlockKey !== key) { targetBlockKey = key; miningTime = 0; } 
                         const blockType = getBlock(bx, by, bz); 
@@ -139,21 +155,31 @@
                             const requiredTime = gameMode === 0 ? 0.05 : blockDef.hardness / miningPower; 
                             miningTime += delta; 
                             let progress = Math.min(miningTime / requiredTime, 1); 
-                            highlightBox.scale.setScalar(1 + progress * 0.15); 
-                            miningOverlay.position.set(bx + 0.5, by + 0.5, bz + 0.5);
+                            
+                            let baseScale = new THREE.Vector3(1, 1, 1);
+                            if (blockType === 'door_top' || blockType === 'door_bottom') baseScale.set(1, 1, 0.1);
+                            else if (blockType === 'door_top_open' || blockType === 'door_bottom_open') baseScale.set(0.1, 1, 1);
+
+                            highlightBox.scale.copy(baseScale);
+                            miningOverlay.scale.copy(baseScale).multiplyScalar(1.01);
+                            miningOverlay.position.copy(highlightBox.position);
                             miningOverlay.visible = true;
+
                             const stage = Math.floor(progress * 9.9);
                             miningOverlay.material = destroyStages[stage];
                             if (miningTime >= requiredTime) { 
                                 let drops = false; if (blockDef.tool === 'none' || (toolDef && toolDef.toolType === blockDef.tool && toolDef.tier >= blockDef.tier)) drops = true; 
                                 setBlock(bx, by, bz, null); 
                                 if (blockType === 'bed_head' || blockType === 'bed_foot') { const targetType = blockType === 'bed_head' ? 'bed_foot' : 'bed_head'; const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]; for (let d of dirs) { if (getBlock(bx + d[0], by, bz + d[1]) === targetType) { setBlock(bx + d[0], by, bz + d[1], null); break; } } }
+                                if (blockType === 'door_top' || blockType === 'door_top_open') { const other = getBlock(bx, by - 1, bz); if (other === 'door_bottom' || other === 'door_bottom_open') setBlock(bx, by - 1, bz, null); }
+                                else if (blockType === 'door_bottom' || blockType === 'door_bottom_open') { const other = getBlock(bx, by + 1, bz); if (other === 'door_top' || other === 'door_top_open') setBlock(bx, by + 1, bz, null); }
                                 highlightBox.visible = false; miningOverlay.visible = false; highlightBox.scale.setScalar(1); 
                                 if (drops && gameMode === 1) { 
                                     if (blockType === 'stone' && Math.random() < 0.1) { addBlockToInventory('flint'); addBlockToInventory('stone'); } 
                                     else if (blockType === 'coal_ore') addBlockToInventory('coal');
                                     else if (blockType === 'diamond_ore') addBlockToInventory('diamond');
                                     else if (blockType === 'bed_head' || blockType === 'bed_foot') { addBlockToInventory('bed'); } 
+                                    else if (blockType === 'door_top' || blockType === 'door_bottom' || blockType === 'door_top_open' || blockType === 'door_bottom_open') { addBlockToInventory('door'); }
                                     else addBlockToInventory(blockType); 
                                 } 
                                 renderInventoryUI(); isMining = false; miningTime = 0; targetBlockKey = null; 

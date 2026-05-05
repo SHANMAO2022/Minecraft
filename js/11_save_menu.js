@@ -11,8 +11,9 @@
         }
 
         function startNewGame(customSeed = null, customMode = 1) {
-            localStorage.removeItem('mc_player'); localStorage.removeItem('mc_mods'); localStorage.removeItem('mc_seed');
+            localStorage.removeItem('mc_player'); localStorage.removeItem('mc_mods'); localStorage.removeItem('mc_seed'); localStorage.removeItem('mc_chests');
             chunks.forEach(c => blockTypes.forEach(t => scene.remove(c.meshes[t]))); chunks.clear(); worldBlocks.clear();
+            window.chestInventories = {};
             entities.forEach(e => { scene.remove(e.mesh); if (e.beam) scene.remove(e.beam); }); entities.length = 0; particles.forEach(p => scene.remove(p.mesh)); particles.length = 0;
             if (customSeed !== null && customSeed !== "") { if (!isNaN(Number(customSeed))) mcSeed = Number(customSeed); else mcSeed = Array.from(customSeed).reduce((acc, char) => acc + char.charCodeAt(0), 0); } else { mcSeed = Math.random(); }
             localStorage.setItem('mc_seed', mcSeed); initNoise();
@@ -22,9 +23,9 @@
                 invState.hotbar[0] = { type: 'obsidian', count: 10 };
                 invState.hotbar[1] = { type: 'bed', count: 1 };
             }
-            invState.main = new Array(45).fill(null); invState.crafting = new Array(9).fill(null); invState.output = null; invState.dragged = null;
+            invState.main = new Array(45).fill(null); invState.crafting = new Array(9).fill(null); invState.armor = new Array(4).fill(null); invState.output = null; invState.dragged = null;
             updateStatusUI();
-            if (gameMode === 0) { for (let i = 0; i < allItemTypes.length && i < 45; i++) invState.main[i] = { type: allItemTypes[i], count: 64 }; document.getElementById('gamemode-display').innerText = '模式: 创造 [双击空格飞行]'; }
+            if (gameMode === 0) { for (let i = 0; i < inventoryItemTypes.length && i < 45; i++) invState.main[i] = { type: inventoryItemTypes[i], count: 64 }; document.getElementById('gamemode-display').innerText = '模式: 创造 [双击空格飞行]'; }
             else { document.getElementById('gamemode-display').innerText = '模式: 生存 [按 T 输入指令]'; }
             renderInventoryUI(); currentDimension = 'overworld'; camera.position.set(0, 100, 0); lastChunkX = -999; spawnPoint = null; updateChunks();
             isPlaying = true; uiLayer.style.display = 'none'; createWorldScreen.style.display = 'none'; worldSelectScreen.style.display = 'none'; controls.lock();
@@ -34,8 +35,9 @@
             const pStr = localStorage.getItem('mc_player');
             if (pStr) {
                 const p = JSON.parse(pStr); currentHealth = p.hp; currentHunger = p.hunger; gameMode = p.mode;
-                invState.hotbar = p.inv.hotbar; invState.main = p.inv.main;
+                invState.hotbar = p.inv.hotbar; invState.main = p.inv.main; invState.armor = p.inv.armor || new Array(4).fill(null);
                 modifiedBlocks = JSON.parse(localStorage.getItem('mc_mods')) || { overworld: {}, nether: {}, end: {} };
+                window.chestInventories = JSON.parse(localStorage.getItem('mc_chests')) || {};
                 dimensionState.overworld.chunks.forEach(c => blockTypes.forEach(t => scene.remove(c.meshes[t]))); dimensionState.nether.chunks.forEach(c => blockTypes.forEach(t => scene.remove(c.meshes[t]))); dimensionState.end.chunks.forEach(c => blockTypes.forEach(t => scene.remove(c.meshes[t])));
                 dimensionState.overworld.chunks.clear(); dimensionState.nether.chunks.clear(); dimensionState.end.chunks.clear();
                 updateStatusUI(); renderInventoryUI(); currentDimension = p.dim; switchDimension(p.dim);
@@ -44,6 +46,6 @@
             }
         }
 
-        function saveGame() { localStorage.setItem('mc_mods', JSON.stringify(modifiedBlocks)); const playerState = { x: camera.position.x, y: camera.position.y, z: camera.position.z, dim: currentDimension, hp: currentHealth, hunger: currentHunger, mode: gameMode, inv: { hotbar: invState.hotbar, main: invState.main } }; localStorage.setItem('mc_player', JSON.stringify(playerState)); }
+        function saveGame() { localStorage.setItem('mc_mods', JSON.stringify(modifiedBlocks)); localStorage.setItem('mc_chests', JSON.stringify(window.chestInventories)); const playerState = { x: camera.position.x, y: camera.position.y, z: camera.position.z, dim: currentDimension, hp: currentHealth, hunger: currentHunger, mode: gameMode, inv: { hotbar: invState.hotbar, main: invState.main, armor: invState.armor } }; localStorage.setItem('mc_player', JSON.stringify(playerState)); }
 
         // ==========================================

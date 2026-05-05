@@ -9,7 +9,8 @@
             destroyStages.push(new THREE.MeshBasicMaterial({ map: t, transparent: true, alphaTest: 0.1, polygonOffset: true, polygonOffsetFactor: -1 }));
         }
         function createPixelTexture(type) {
-            const path = 'textures/' + type + '.png?v=' + CACHE_V;
+            const fileName = (type === 'door') ? 'oak_door' : type;
+            const path = 'textures/' + fileName + '.png?v=' + CACHE_V;
             const texture = textureLoader.load(path, (tex) => {
                 const canvas = document.createElement('canvas'); canvas.width = 16; canvas.height = 16;
                 const ctx = canvas.getContext('2d');
@@ -62,7 +63,11 @@
         const typeGeometries = {
             tall_grass: crossGeometry,
             end_rod: rodGeometry,
-            torch: new THREE.BoxGeometry(0.125, 0.625, 0.125)
+            torch: new THREE.BoxGeometry(0.125, 0.625, 0.125),
+            door_top: (function(){ const g = new THREE.BoxGeometry(1, 1, 0.1); g.translate(0, 0, -0.45); return g; })(),
+            door_bottom: (function(){ const g = new THREE.BoxGeometry(1, 1, 0.1); g.translate(0, 0, -0.45); return g; })(),
+            door_top_open: (function(){ const g = new THREE.BoxGeometry(0.1, 1, 1); g.translate(-0.45, 0, 0); return g; })(),
+            door_bottom_open: (function(){ const g = new THREE.BoxGeometry(0.1, 1, 1); g.translate(-0.45, 0, 0); return g; })()
         };
         const materials = {
             grass: [
@@ -132,7 +137,35 @@
                 new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_top') }),
                 new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_front_on'), emissive: 0xffaa00, emissiveIntensity: 0.5 }),
                 new THREE.MeshLambertMaterial({ map: createPixelTexture('furnace_side') })
-            ]
+            ],
+            chest: [
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('chest_front') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('chest_front') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('chest_top') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('chest_top') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('chest_front') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('chest_front') })
+            ],
+            door_top: (function(){
+                const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('oak_door_top'), transparent: true, alphaTest: 0.1, side: THREE.DoubleSide });
+                const trans = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
+                return [mat, mat, trans, trans, mat, mat];
+            })(),
+            door_bottom: (function(){
+                const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('oak_door_bottom'), transparent: true, alphaTest: 0.1, side: THREE.DoubleSide });
+                const trans = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
+                return [mat, mat, trans, trans, mat, mat];
+            })(),
+            door_top_open: (function(){
+                const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('oak_door_top'), transparent: true, alphaTest: 0.1, side: THREE.DoubleSide });
+                const trans = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
+                return [mat, mat, trans, trans, mat, mat];
+            })(),
+            door_bottom_open: (function(){
+                const mat = new THREE.MeshLambertMaterial({ map: createPixelTexture('oak_door_bottom'), transparent: true, alphaTest: 0.1, side: THREE.DoubleSide });
+                const trans = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
+                return [mat, mat, trans, trans, mat, mat];
+            })()
         };
         ['dirt', 'stone', 'bedrock', 'sand', 'planks', 'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore', 'obsidian', 'netherrack', 'magma', 'end_stone', 'stone_brick'].forEach(k => { if (!materials[k]) materials[k] = new THREE.MeshLambertMaterial({ map: createPixelTexture(k) }); });
         
@@ -141,12 +174,14 @@
             if (materials[key]) {
                 if (Array.isArray(materials[key])) {
                     if (key === 'furnace') icons[key] = 'textures/furnace_front.png';
+                    else if (key === 'chest') icons[key] = 'textures/chest_front.png';
                     else icons[key] = materials[key][0].map ? materials[key][0].map.uiIcon : 'textures/' + key + '.png';
                 } else {
                     icons[key] = materials[key].map ? materials[key].map.uiIcon : 'textures/' + key + '.png';
                 }
             } else {
-                icons[key] = 'textures/' + key + '.png';
+                if (key === 'door') icons[key] = 'textures/oak_door.png';
+                else icons[key] = 'textures/' + key + '.png';
             }
             // Ensure icons are pre-loaded for 3D hand view
             if (!itemPixels[key]) createPixelTexture(key);

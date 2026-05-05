@@ -21,13 +21,37 @@
             if (isInventoryOpen) { const slotEl = event.target.closest('.slot'); if (slotEl && slotEl.id !== 'dragged-icon') handleSlotClick(slotEl.getAttribute('data-container'), parseInt(slotEl.getAttribute('data-index')), event.button); return; }
             if (!controls.isLocked || isDead || isGameClear) return;
             const activeItem = invState.hotbar[currentSlotIndex];
-            if (event.button === 0 && gameMode === 0) { raycaster.setFromCamera(center, camera); const activeMeshes = []; for (const chunk of chunks.values()) blockTypes.forEach(t => { if (chunk.meshes[t].count > 0) activeMeshes.push(chunk.meshes[t]); }); const intersects = raycaster.intersectObjects(activeMeshes); if (intersects.length > 0) { const intersect = intersects[0]; const p = intersect.point.clone().sub(intersect.face.normal.clone().multiplyScalar(0.1)); setBlock(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z), null); actionType = 'swing'; actionTimer = 0.3; } return; }
+            if (event.button === 0 && gameMode === 0) { 
+                raycaster.setFromCamera(center, camera); 
+                const activeMeshes = []; 
+                for (const chunk of chunks.values()) blockTypes.forEach(t => { if (chunk.meshes[t].count > 0) activeMeshes.push(chunk.meshes[t]); }); 
+                const intersects = raycaster.intersectObjects(activeMeshes); 
+                if (intersects.length > 0) { 
+                    const intersect = intersects[0]; 
+                    const p = intersect.point.clone().sub(intersect.face.normal.clone().multiplyScalar(0.01)); 
+                    const bx = Math.floor(p.x), by = Math.floor(p.y), bz = Math.floor(p.z);
+                    const blockType = getBlock(bx, by, bz);
+                    setBlock(bx, by, bz, null); 
+                    if (blockType === 'bed_head' || blockType === 'bed_foot') {
+                        const targetType = blockType === 'bed_head' ? 'bed_foot' : 'bed_head';
+                        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+                        for (let d of dirs) { if (getBlock(bx + d[0], by, bz + d[1]) === targetType) { setBlock(bx + d[0], by, bz + d[1], null); break; } }
+                    } else if (blockType === 'door_top' || blockType === 'door_top_open') {
+                        const other = getBlock(bx, by - 1, bz);
+                        if (other === 'door_bottom' || other === 'door_bottom_open') setBlock(bx, by - 1, bz, null);
+                    } else if (blockType === 'door_bottom' || blockType === 'door_bottom_open') {
+                        const other = getBlock(bx, by + 1, bz);
+                        if (other === 'door_top' || other === 'door_top_open') setBlock(bx, by + 1, bz, null);
+                    }
+                    actionType = 'swing'; actionTimer = 0.3; 
+                } return; 
+            }
             raycaster.setFromCamera(center, camera); const activeMeshes = []; for (const chunk of chunks.values()) { blockTypes.forEach(type => { if (type !== 'water' && type !== 'lava' && chunk.meshes[type].count > 0) activeMeshes.push(chunk.meshes[type]); }); }
             const mobMeshes = []; entities.forEach(e => { if (e.mesh && e.mesh.children) mobMeshes.push(...e.mesh.children); }); const intersects = raycaster.intersectObjects([...activeMeshes, ...mobMeshes]);
 
             if (event.button === 2) {
                 if (intersects.length > 0 && !mobMeshes.includes(intersects[0].object)) {
-                    const intersect = intersects[0]; const p = intersect.point.clone().sub(intersect.face.normal.clone().multiplyScalar(0.1));
+                    const intersect = intersects[0]; const p = intersect.point.clone().sub(intersect.face.normal.clone().multiplyScalar(0.01)); 
                     const cbx = Math.floor(p.x); const cby = Math.floor(p.y); const cbz = Math.floor(p.z);
                     const clickedBlock = getBlock(cbx, cby, cbz);
                     if (clickedBlock === 'crafting_table') { craftingMode = 3; isInventoryOpen = true; controls.unlock(); return; }
@@ -43,6 +67,34 @@
                             appendChat('已设置重生点，只能在夜间睡觉。');
                         }
                         return;
+                    }
+                    if (clickedBlock === 'door_top' || clickedBlock === 'door_bottom' || clickedBlock === 'door_top_open' || clickedBlock === 'door_bottom_open') {
+                        const isTop = (clickedBlock === 'door_top' || clickedBlock === 'door_top_open');
+                        const isOpen = (clickedBlock === 'door_top_open' || clickedBlock === 'door_bottom_open');
+                        const otherY = isTop ? cby - 1 : cby + 1;
+                        if (!isOpen) {
+                            setBlock(cbx, cby, cbz, isTop ? 'door_top_open' : 'door_bottom_open');
+                            setBlock(cbx, otherY, cbz, isTop ? 'door_bottom_open' : 'door_top_open');
+                        } else {
+                            setBlock(cbx, cby, cbz, isTop ? 'door_top' : 'door_bottom');
+                            setBlock(cbx, otherY, cbz, isTop ? 'door_bottom' : 'door_top');
+                        }
+                        return;
+                    }
+                    if (clickedBlock === 'chest') {
+                        const neighbors = [[1,0,0], [-1,0,0], [0,0,1], [0,0,-1]];
+                        let pairedPos = null;
+                        for (const [dx, dy, dz] of neighbors) { if (getBlock(cbx + dx, cby + dy, cbz + dz) === 'chest') { pairedPos = { x: cbx + dx, y: cby + dy, z: cbz + dz }; break; } }
+                        let chestKey = `${cbx},${cby},${cbz}`;
+                        let slotCount = 27;
+                        if (pairedPos) {
+                            const positions = [ {x: cbx, y: cby, z: cbz}, pairedPos ].sort((a,b) => (a.x - b.x) || (a.y - b.y) || (a.z - b.z));
+                            chestKey = `large:${positions[0].x},${positions[0].y},${positions[0].z}_${positions[1].x},${positions[1].y},${positions[1].z}`;
+                            slotCount = 54;
+                        }
+                        if (!window.chestInventories[chestKey]) window.chestInventories[chestKey] = new Array(slotCount).fill(null);
+                        invState.chest = window.chestInventories[chestKey];
+                        craftingMode = 5; isInventoryOpen = true; controls.unlock(); return;
                     }
                 }
 
@@ -72,7 +124,25 @@
                     const intersect = intersects[0]; const placeType = activeItem.type; const p = intersect.point.clone().sub(intersect.face.normal.clone().multiplyScalar(0.1)); const bx = Math.floor(p.x); const by = Math.floor(p.y); const bz = Math.floor(p.z);
                     if (getBlock(bx, by, bz) === 'end_portal_frame_empty' && activeItem.type === 'ender_eye') { setBlock(bx, by, bz, 'end_portal_frame_filled'); if (gameMode !== 0) { activeItem.count--; if (activeItem.count <= 0) invState.hotbar[currentSlotIndex] = null; } renderInventoryUI(); let filledCount = 0; for (let ix = 62; ix <= 66; ix++) for (let iz = 62; iz <= 66; iz++) if (getBlock(ix, by, iz) === 'end_portal_frame_filled') filledCount++; if (filledCount >= 12) { for (let ix = 63; ix <= 65; ix++) for (let iz = 63; iz <= 65; iz++) setBlock(ix, by, iz, 'end_portal'); } return; }
                     if (placeType === 'flint_and_steel' && getBlock(bx, by, bz) === 'obsidian') { actionType = 'swing'; actionTimer = 0.3; if (intersect.face.normal.y > 0.5) { for (let dy = 1; dy <= 3; dy++) setBlock(bx, by + dy, bz, 'nether_portal'); } else { const nx = bx + Math.round(intersect.face.normal.x); const ny = by + Math.round(intersect.face.normal.y); const nz = bz + Math.round(intersect.face.normal.z); for (let dy = 0; dy <= 2; dy++) setBlock(nx, ny + dy, nz, 'nether_portal'); } return; }
-                    if (ITEMS[placeType].type === 'block') { const newBx = bx + Math.round(intersect.face.normal.x); const newBy = by + Math.round(intersect.face.normal.y); const newBz = bz + Math.round(intersect.face.normal.z); const newBlock = getBlock(newBx, newBy, newBz); const camPos = camera.position; const epsilon = 0.001; const pMinX = camPos.x - 0.28 + epsilon; const pMaxX = camPos.x + 0.28 - epsilon; const pMinY = camPos.y - 1.55 + epsilon; const pMaxY = camPos.y + 0.19 - epsilon; const pMinZ = camPos.z - 0.28 + epsilon; const pMaxZ = camPos.z + 0.28 - epsilon; const bMinX = newBx; const bMaxX = newBx + 1; const bMinY = newBy; const bMaxY = newBy + 1; const bMinZ = newBz; const bMaxZ = newBz + 1; const playerIntersecting = !(pMaxX <= bMinX || pMinX >= bMaxX || pMaxY <= bMinY || pMinY >= bMaxY || pMaxZ <= bMinZ || pMinZ >= bMaxZ); if ((!newBlock || newBlock === 'water' || newBlock === 'lava') && (!playerIntersecting || placeType === 'tall_grass' || placeType === 'torch')) { if (placeType === 'bed') { let dir = new THREE.Vector3(); camera.getWorldDirection(dir); let dx = 0, dz = 0; if (Math.abs(dir.x) > Math.abs(dir.z)) dx = dir.x > 0 ? 1 : -1; else dz = dir.z > 0 ? 1 : -1; const headX = newBx + dx; const headZ = newBz + dz; const headBlock = getBlock(headX, newBy, headZ); if (!headBlock || headBlock === 'water' || headBlock === 'lava') { setBlock(newBx, newBy, newBz, 'bed_foot'); setBlock(headX, newBy, headZ, 'bed_head'); if (gameMode !== 0) { activeItem.count--; if (activeItem.count <= 0) invState.hotbar[currentSlotIndex] = null; } renderInventoryUI(); } else { appendChat('空间不足，无法放下床。'); } return; } setBlock(newBx, newBy, newBz, placeType); if (gameMode !== 0) { activeItem.count--; if (activeItem.count <= 0) invState.hotbar[currentSlotIndex] = null; } renderInventoryUI(); } return; }
+                    if (placeType === 'door') {
+                        const newBx = bx + Math.round(intersect.face.normal.x); const newBy = by + Math.round(intersect.face.normal.y); const newBz = bz + Math.round(intersect.face.normal.z);
+                        if ((getBlock(newBx, newBy, newBz) && getBlock(newBx, newBy, newBz) !== 'water' && getBlock(newBx, newBy, newBz) !== 'lava') || (getBlock(newBx, newBy + 1, newBz) && getBlock(newBx, newBy + 1, newBz) !== 'water' && getBlock(newBx, newBy + 1, newBz) !== 'lava')) { appendChat('空间不足，无法放置门。'); return; }
+                        const camPos = camera.position; const epsilon = 0.001; const pMinX = camPos.x - 0.28 + epsilon; const pMaxX = camPos.x + 0.28 - epsilon; const pMinY = camPos.y - 1.55 + epsilon; const pMaxY = camPos.y + 0.19 - epsilon; const pMinZ = camPos.z - 0.28 + epsilon; const pMaxZ = camPos.z + 0.28 - epsilon;
+                        const intersectPlayer = (x, y, z) => !(pMaxX <= x || pMinX >= x + 1 || pMaxY <= y || pMinY >= y + 1 || pMaxZ <= z || pMinZ >= z + 1);
+                        if (intersectPlayer(newBx, newBy, newBz) || intersectPlayer(newBx, newBy + 1, newBz)) return;
+                        setBlock(newBx, newBy, newBz, 'door_bottom'); setBlock(newBx, newBy + 1, newBz, 'door_top');
+                        if (gameMode !== 0) { activeItem.count--; if (activeItem.count <= 0) invState.hotbar[currentSlotIndex] = null; }
+                        renderInventoryUI(); return;
+                    }
+                    if (placeType === 'chest') {
+                        const newBx = bx + Math.round(intersect.face.normal.x); const newBy = by + Math.round(intersect.face.normal.y); const newBz = bz + Math.round(intersect.face.normal.z);
+                        const neighbors = [[1,0,0], [-1,0,0], [0,0,1], [0,0,-1]];
+                        let chestNeighbors = 0; let foundNeighbor = null;
+                        for (const [dx, dy, dz] of neighbors) { if (getBlock(newBx + dx, newBy, newBz + dz) === 'chest') { chestNeighbors++; foundNeighbor = { x: newBx + dx, y: newBy, z: newBz + dz }; } }
+                        if (chestNeighbors > 1) { appendChat('无法在此放置箱子（附近已有多个箱子）。'); return; }
+                        if (chestNeighbors === 1) { let neighborChestNeighbors = 0; for (const [dx, dy, dz] of neighbors) { if ((foundNeighbor.x + dx !== newBx || foundNeighbor.z + dz !== newBz) && getBlock(foundNeighbor.x + dx, foundNeighbor.y, foundNeighbor.z + dz) === 'chest') { neighborChestNeighbors++; } } if (neighborChestNeighbors > 0) { appendChat('无法在此放置箱子（目标箱子已配对）。'); return; } }
+                    }
+                    if (ITEMS[placeType].type === 'block') { const newBx = bx + Math.round(intersect.face.normal.x); const newBy = by + Math.round(intersect.face.normal.y); const newBz = bz + Math.round(intersect.face.normal.z); const newBlock = getBlock(newBx, newBy, newBz); const camPos = camera.position; const epsilon = 0.001; const pMinX = camPos.x - 0.28 + epsilon; const pMaxX = camPos.x + 0.28 - epsilon; const pMinY = camPos.y - 1.55 + epsilon; const pMaxY = camPos.y + 0.19 - epsilon; const pMinZ = camPos.z - 0.28 + epsilon; const pMaxZ = camPos.z + 0.28 - epsilon; const bMinX = newBx; const bMaxX = newBx + 1; const bMinY = newBy; const bMaxY = newBy + 1; const bMinZ = newBz; const bMaxZ = newBz + 1; const playerIntersecting = !(pMaxX <= bMinX || pMinX >= bMaxX || pMaxY <= bMinY || pMinY >= bMaxY || pMaxZ <= bMinZ || pMinZ >= bMaxZ); if ((!newBlock || newBlock === 'water' || newBlock === 'lava') && (!playerIntersecting || placeType === 'tall_grass' || placeType === 'torch')) { if (placeType === 'bed') { let dir = new THREE.Vector3(); camera.getWorldDirection(dir); let dx = 0, dz = 0; if (Math.abs(dir.x) > Math.abs(dir.z)) dx = dir.x > 0 ? 1 : -1; else dz = dir.z > 0 ? 1 : -1; const headX = newBx + dx; const headZ = newBz + dz; const headBlock = getBlock(headX, newBy, headZ); if (!headBlock || headBlock === 'water' || headBlock || 'lava') { setBlock(newBx, newBy, newBz, 'bed_foot'); setBlock(headX, newBy, headZ, 'bed_head'); if (gameMode !== 0) { activeItem.count--; if (activeItem.count <= 0) invState.hotbar[currentSlotIndex] = null; } renderInventoryUI(); } else { appendChat('空间不足，无法放下床。'); } return; } setBlock(newBx, newBy, newBz, placeType); if (gameMode !== 0) { activeItem.count--; if (activeItem.count <= 0) invState.hotbar[currentSlotIndex] = null; } renderInventoryUI(); } return; }
                 }
                 if (activeItem.type === 'ender_eye' && currentDimension === 'overworld') { actionType = 'swing'; actionTimer = 0.3; spawnEnderEyeEntity(camera.position.x, camera.position.y, camera.position.z); if (gameMode !== 0) { activeItem.count--; if (activeItem.count <= 0) invState.hotbar[currentSlotIndex] = null; } renderInventoryUI(); return; }
             }
@@ -86,7 +156,7 @@
                         if (hitMob.type === 'enderman') { if (hitMob.onHit) hitMob.onHit(); } else if (hitMob.type === 'crystal') { hitMob.hp = 0; } else if (hitMob.type !== 'dragon') { const kb = new THREE.Vector3().subVectors(hitMob.mesh.position, camera.position).normalize(); if (hitMob.type === 'pig') { hitMob.target.copy(hitMob.mesh.position).addScaledVector(kb, 3); hitMob.state = 'wander'; hitMob.timer = 2; } else { hitMob.mesh.position.addScaledVector(kb, 1); } }
                         if (hitMob.hp <= 0 && hitMob.type !== 'dragon' && hitMob.type !== 'crystal') { scene.remove(hitMob.mesh); entities.splice(entities.indexOf(hitMob), 1); if (hitMob.type === 'pig' && gameMode === 1) addBlockToInventory('raw_porkchop', 1); else if (hitMob.type === 'zombie' && gameMode === 1) addBlockToInventory('rotten_flesh', 1); else if (hitMob.type === 'enderman' && gameMode === 1) addBlockToInventory('ender_pearl', 1); else if (hitMob.type === 'blaze' && gameMode === 1) addBlockToInventory('blaze_rod', Math.floor(Math.random() * 2) + 2); else if (hitMob.type === 'spider' && gameMode === 1) addBlockToInventory('string', Math.floor(Math.random() * 2) + 5); renderInventoryUI(); } return;
                     }
-                    const p = intersect.point.clone().sub(intersect.face.normal.clone().multiplyScalar(0.1)); const bx = Math.floor(p.x); const by = Math.floor(p.y); const bz = Math.floor(p.z); const bt = getBlock(bx, by, bz); if (bt === 'end_portal' || bt === 'nether_portal' || bt === 'return_portal' || bt === 'end_portal_frame_empty') return;
+                    const p = intersect.point.clone().sub(intersect.face.normal.clone().multiplyScalar(0.01)); const bx = Math.floor(p.x); const by = Math.floor(p.y); const bz = Math.floor(p.z); const bt = getBlock(bx, by, bz); if (bt === 'end_portal' || bt === 'nether_portal' || bt === 'return_portal' || bt === 'end_portal_frame_empty') return;
                     isMining = true; miningTime = 0;
                 }
             }
@@ -117,5 +187,18 @@
         const onKeyUp = function (event) { switch (event.code) { case 'ArrowUp': case 'KeyW': moveForward = false; break; case 'ArrowLeft': case 'KeyA': moveLeft = false; break; case 'ArrowDown': case 'KeyS': moveBackward = false; break; case 'ArrowRight': case 'KeyD': moveRight = false; break; case 'Space': jumpPressed = false; break; case 'ShiftLeft': case 'ShiftRight': shiftPressed = false; break; } };
         document.addEventListener('keydown', onKeyDown); document.addEventListener('keyup', onKeyUp);
 
-        function checkCollisionGeneric(x, y, z, radius, height) { const epsilon = 0.001; const minX = Math.floor(x - radius + epsilon); const maxX = Math.floor(x + radius - epsilon); const minY = Math.floor(y + epsilon); const maxY = Math.floor(y + height - epsilon); const minZ = Math.floor(z - radius + epsilon); const maxZ = Math.floor(z + radius - epsilon); for (let i = minX; i <= maxX; i++) { for (let j = minY; j <= Math.min(maxY, 100); j++) { for (let k = minZ; k <= maxZ; k++) { const b = getBlock(i, j, k); if (b && b !== 'nether_portal' && b !== 'end_portal' && b !== 'return_portal' && b !== 'water' && b !== 'lava' && b !== 'tall_grass' && b !== 'end_rod' && b !== 'torch') return true; } } } return false; }
+        function checkCollisionGeneric(x, y, z, radius, height) { 
+            const epsilon = 0.001; 
+            const minX = Math.floor(x - radius + epsilon); const maxX = Math.floor(x + radius - epsilon); 
+            const minY = Math.floor(y + epsilon); const maxY = Math.floor(y + height - epsilon); 
+            const minZ = Math.floor(z - radius + epsilon); const maxZ = Math.floor(z + radius - epsilon); 
+            for (let i = minX; i <= maxX; i++) { 
+                for (let j = minY; j <= Math.min(maxY, 100); j++) { 
+                    for (let k = minZ; k <= maxZ; k++) { 
+                        const b = getBlock(i, j, k); 
+                        if (b && !['nether_portal', 'end_portal', 'return_portal', 'water', 'lava', 'tall_grass', 'end_rod', 'torch', 'door_top_open', 'door_bottom_open'].includes(b)) return true; 
+                    } 
+                } 
+            } return false; 
+        }
         // ==========================================

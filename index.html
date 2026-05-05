@@ -34,9 +34,18 @@
         </div>
     </div>
 
-    <div id="status-bars">
-        <div id="health-bar">❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️</div>
-        <div id="hunger-bar">🍗🍗🍗🍗🍗🍗🍗🍗🍗🍗</div>
+    <div id="status-bars" style="position: absolute; bottom: 85px; left: 50%; transform: translateX(-50%); width: 496px; display: none; z-index: 5; flex-direction: column;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; width: 100%;">
+            <!-- 左侧：护甲和生命值堆叠 -->
+            <div style="display: flex; flex-direction: column; align-items: flex-start;">
+                <div id="armor-bar" style="height: 24px; font-size: 20px; line-height: 24px; text-shadow: 2px 2px 0 #000; display: flex; flex-direction: row; gap: 0px;"></div>
+                <div id="health-bar" style="height: 24px; font-size: 20px; line-height: 24px; text-shadow: 2px 2px 0 #000; display: flex; flex-direction: row; gap: 0px;">❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️</div>
+            </div>
+            <!-- 右侧：饥饿值 -->
+            <div style="display: flex; flex-direction: column; align-items: flex-end;">
+                <div id="hunger-bar" style="height: 24px; font-size: 20px; line-height: 24px; text-shadow: 2px 2px 0 #000; display: flex; flex-direction: row; gap: 0px;">🍗🍗🍗🍗🍗🍗🍗🍗🍗🍗</div>
+            </div>
+        </div>
     </div>
 
     <div id="death-screen">
@@ -59,8 +68,19 @@
     </div>
 
     <div id="inventory-ui">
-        <div class="inventory-top">
-            <div class="crafting-area">
+        <div class="inventory-top" style="display: flex; flex-direction: row; align-items: flex-start; justify-content: center; gap: 30px;">
+            <div id="armor-slots" style="display: flex; flex-direction: column; gap: 8px;">
+                <div class="slot" data-container="armor" data-index="0" title="头盔" style="background-color: rgba(255,255,255,0.05); border: 2px solid #555;"></div>
+                <div class="slot" data-container="armor" data-index="1" title="胸甲" style="background-color: rgba(255,255,255,0.05); border: 2px solid #555;"></div>
+                <div class="slot" data-container="armor" data-index="2" title="护腿" style="background-color: rgba(255,255,255,0.05); border: 2px solid #555;"></div>
+                <div class="slot" data-container="armor" data-index="3" title="靴子" style="background-color: rgba(255,255,255,0.05); border: 2px solid #555;"></div>
+            </div>
+            
+            <div id="player-preview" style="width: 120px; height: 180px; background: rgba(0,0,0,0.3); border: 2px solid #555; border-radius: 4px; position: relative; display: flex; justify-content: center; align-items: center; overflow: hidden;">
+                <canvas id="player-preview-canvas" width="60" height="100" style="image-rendering: pixelated; width: 90px; height: 150px;"></canvas>
+            </div>
+
+            <div class="crafting-area" style="display: flex; align-items: center; gap: 20px;">
                 <div id="crafting-box">
                     <div class="inv-section-title" id="crafting-title">合成 (2x2)</div>
                     <div class="crafting-grid size-2" id="crafting-grid">
@@ -86,6 +106,10 @@
                         <div id="smelt-progress-fill" style="width: 0%; height: 100%; background: #ffff55;"></div>
                         <div style="position: absolute; top: -15px; left: 0; width: 100%; text-align: center; font-size: 14px;">➜</div>
                     </div>
+                </div>
+                <div id="chest-box" style="display:none; flex-direction: column; gap: 5px;">
+                    <div class="inv-section-title">容器存储</div>
+                    <div id="chest-grid" style="display: grid; grid-template-columns: repeat(9, 40px); gap: 4px; max-height: 200px; overflow-y: auto; padding: 4px; background: rgba(0,0,0,0.2); border: 1px solid #555;"></div>
                 </div>
                 <div class="crafting-arrow">➜</div>
                 <div>
@@ -185,9 +209,19 @@
             </div>
             <div class="mc-row">
                 <div class="mc-button" id="btn-options-pause">选项...</div>
-                <div class="mc-button disabled" onclick="alert('敬请期待')">对局域网开放</div>
+                <div class="mc-button" onclick="document.getElementById('lan-setup-modal').style.display='flex'; document.getElementById('pause-screen').style.display='none';">对局域网开放</div>
             </div>
             <div class="mc-button" id="btn-save-quit">保存并退回到标题屏幕</div>
+        </div>
+    </div>
+
+    <!-- 局域网开放设置 -->
+    <div id="lan-setup-modal" class="ui-layer" style="display: none; background: rgba(0,0,0,0.8); flex-direction: column; justify-content: center; align-items: center; z-index: 200;">
+        <div style="background: #333; padding: 20px; border: 4px solid #555; display: flex; flex-direction: column; gap: 15px; width: 300px;">
+            <div style="color: white; text-align: center; font-size: 20px;">对局域网开放</div>
+            <input type="text" id="lan-room-id" placeholder="自定义房间号 (Room ID)" style="padding: 10px; font-size: 16px; background: #000; color: #fff; border: 2px solid #555;">
+            <button class="mc-button" style="width: 100%;" onclick="startLanServer()">创建房间</button>
+            <button class="mc-button" style="width: 100%;" onclick="document.getElementById('lan-setup-modal').style.display='none'">取消</button>
         </div>
     </div>
 

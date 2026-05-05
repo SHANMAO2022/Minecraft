@@ -5,8 +5,8 @@
 
         const mobTexLoader = new THREE.TextureLoader();
         const mobTexs = {};
-        ['zombie', 'pig', 'spider', 'enderman', 'blaze', 'dragon', 'end_crystal'].forEach(m => {
-            mobTexs[m] = mobTexLoader.load('textures/' + m + '.png');
+        ['zombie', 'pig', 'spider', 'enderman', 'blaze', 'dragon', 'end_crystal', 'cow'].forEach(m => {
+            mobTexs[m] = mobTexLoader.load('textures/' + m + '.png?v=' + CACHE_V);
             mobTexs[m].magFilter = THREE.NearestFilter;
             mobTexs[m].colorSpace = THREE.SRGBColorSpace;
         });
@@ -119,6 +119,43 @@
                     const step = this.velocity.clone().multiplyScalar(delta);
                     this.mesh.position.add(step);
                     if (checkCollisionGeneric(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z, 0.1, 0.1)) return true;
+                    return false;
+                }
+            });
+        }
+
+        function spawnCow(x, z, y) {
+            const cGroup = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 1.4), getMobPartMats('cow', 18, 4, 12, 18, 10)); body.position.y = 0.6; cGroup.add(body);
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.5), getMobPartMats('cow', 0, 0, 8, 8, 6)); head.position.set(0, 1.0, 0.8); cGroup.add(head);
+            const hornL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.2, 0.1), getMobPartMats('cow', 22, 0, 1, 2, 1)); hornL.position.set(0.2, 1.35, 0.75); cGroup.add(hornL);
+            const hornR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.2, 0.1), getMobPartMats('cow', 22, 0, 1, 2, 1)); hornR.position.set(-0.2, 1.35, 0.75); cGroup.add(hornR);
+            const legPos = [[-0.35, 0.3, 0.5], [0.35, 0.3, 0.5], [-0.35, 0.3, -0.5], [0.35, 0.3, -0.5]]; const legs = [];
+            const legGeo = new THREE.BoxGeometry(0.25, 0.6, 0.25); legGeo.translate(0, -0.3, 0);
+            legPos.forEach(pos => { const leg = new THREE.Mesh(legGeo, getMobPartMats('cow', 0, 16, 4, 12, 4)); leg.position.set(...pos); cGroup.add(leg); legs.push(leg); });
+            cGroup.position.set(x, y + 2, z); scene.add(cGroup);
+            entities.push({
+                type: 'cow', mesh: cGroup, hp: 10, legs: legs, state: 'idle', timer: 0, velocity: new THREE.Vector3(), target: new THREE.Vector3(),
+                update: function (delta, time) {
+                    if (this.hp <= 0) { addBlockToInventory('raw_beef', Math.floor(Math.random() * 2) + 1); addBlockToInventory('leather', Math.floor(Math.random() * 2)); renderInventoryUI(); return true; }
+                    this.timer -= delta;
+                    if (this.timer <= 0) {
+                        if (this.state === 'idle') { this.state = 'wander'; this.timer = 2 + Math.random() * 3; this.target.set(this.mesh.position.x + (Math.random() - 0.5) * 10, this.mesh.position.y, this.mesh.position.z + (Math.random() - 0.5) * 10); this.mesh.lookAt(this.target.x, this.mesh.position.y, this.target.z); }
+                        else { this.state = 'idle'; this.timer = 1 + Math.random() * 4; }
+                    }
+                    if (this.state === 'wander') {
+                        const dir = new THREE.Vector3().subVectors(this.target, this.mesh.position); dir.y = 0;
+                        if (dir.length() > 0.1) {
+                            dir.normalize(); const stepX = dir.x * 1.5 * delta; const stepZ = dir.z * 1.5 * delta;
+                            const px = this.mesh.position.x; const py = this.mesh.position.y; const pz = this.mesh.position.z;
+                            if (!checkCollisionGeneric(px + stepX, py - 0.2, pz, 0.45, 1.2)) this.mesh.position.x += stepX; else { this.timer = 0; if (this.velocity.y === 0) this.velocity.y = 6; }
+                            if (!checkCollisionGeneric(px, py - 0.2, pz + stepZ, 0.45, 1.2)) this.mesh.position.z += stepZ; else { this.timer = 0; if (this.velocity.y === 0) this.velocity.y = 6; }
+                            const ls = Math.sin(time * 10) * 0.5; this.legs[0].rotation.x = ls; this.legs[1].rotation.x = -ls; this.legs[2].rotation.x = -ls; this.legs[3].rotation.x = ls;
+                        }
+                    } else { this.legs.forEach(leg => leg.rotation.x = 0); }
+                    this.velocity.y -= 25.0 * delta; this.mesh.position.y += this.velocity.y * delta;
+                    if (checkCollisionGeneric(this.mesh.position.x, this.mesh.position.y - 0.2, this.mesh.position.z, 0.45, 0.1)) { this.mesh.position.y = Math.floor(this.mesh.position.y - 0.2) + 1 + 0.2; this.velocity.y = 0; }
+                    this.mesh.children.forEach(c => { if (c.material && c.material.emissive && c.material.emissive.r > 0) { c.material.emissive.r = Math.max(0, c.material.emissive.r - delta * 10); c.material.emissive.g = Math.max(0, c.material.emissive.g - delta * 10); c.material.emissive.b = Math.max(0, c.material.emissive.b - delta * 10); } });
                     return false;
                 }
             });
@@ -389,13 +426,20 @@
             const wingR = new THREE.Mesh(wingGeo, dMat); wingR.position.set(-1, 1, 0); wingR.rotation.z = Math.PI; dGroup.add(wingR);
             const tail = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 6), dMat); tail.position.set(0, 0, -7); dGroup.add(tail);
             dGroup.scale.set(2, 2, 2); dGroup.position.set(0, 50, 0); scene.add(dGroup);
-            document.getElementById('boss-bar-container').style.display = 'flex';
+            // 初始显示判断
+            document.getElementById('boss-bar-container').style.display = (currentDimension === 'end') ? 'flex' : 'none';
             entities.push({
                 type: 'dragon', mesh: dGroup, wings: [wingL, wingR], hp: 200, maxHp: 200, phase: 'circle', timer: 0, angle: 0,
                 update: function (delta, time) {
                     if (isGameClear) return false;
-                    document.getElementById('boss-bar-fill').style.width = `${(this.hp / this.maxHp) * 100}%`;
-                    if (this.hp <= 0) { document.getElementById('boss-bar-container').style.display = 'none'; for (let i = 0; i < 30; i++) spawnParticle(this.mesh.position, 0xff00ff); generateReturnPortal(); return true; }
+                    const barContainer = document.getElementById('boss-bar-container');
+                    if (currentDimension === 'end') {
+                        barContainer.style.display = 'flex';
+                        document.getElementById('boss-bar-fill').style.width = `${(this.hp / this.maxHp) * 100}%`;
+                    } else {
+                        barContainer.style.display = 'none';
+                    }
+                    if (this.hp <= 0) { barContainer.style.display = 'none'; for (let i = 0; i < 30; i++) spawnParticle(this.mesh.position, 0xff00ff); generateReturnPortal(); return true; }
                     const flap = Math.sin(time * 8) * 0.5; this.wings[0].rotation.z = flap; this.wings[1].rotation.z = Math.PI - flap;
                     this.timer += delta;
                     if (this.phase === 'circle') { this.angle += delta * 0.5; const targetPos = new THREE.Vector3(Math.cos(this.angle) * 30, 50 + Math.sin(time * 2) * 5, Math.sin(this.angle) * 30); this.mesh.position.lerp(targetPos, delta * 2); this.mesh.lookAt(targetPos); if (this.timer > 10 && Math.random() < 0.05) { this.phase = 'swoop'; this.timer = 0; } }

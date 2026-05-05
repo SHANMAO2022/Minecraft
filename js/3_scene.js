@@ -32,7 +32,11 @@
                 const chunk = chunks.get(`${cx},${cz}`);
                 if (chunk) {
                     if (type === null) { chunk.blocks.delete(key); worldBlocks.delete(key); }
-                    else { chunk.blocks.set(key, type); if (type !== 'water' && type !== 'lava' && type !== 'tall_grass' && type !== 'end_portal_frame_empty') worldBlocks.add(key); }
+                    else { 
+                        chunk.blocks.set(key, type); 
+                        const nonSolid = ['water', 'lava', 'tall_grass', 'end_portal_frame_empty', 'torch', 'end_rod', 'door_top_open', 'door_bottom_open'];
+                        if (!nonSolid.includes(type)) worldBlocks.add(key); 
+                    }
                     rebuildChunkMesh(chunk);
                 }
             }
