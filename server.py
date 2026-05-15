@@ -24,6 +24,12 @@ class SaveHandler(http.server.SimpleHTTPRequestHandler):
         else:
             self.send_error(404)
 
+    def end_headers(self):
+        self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+        self.send_header('Pragma', 'no-cache')
+        self.send_header('Expires', '0')
+        super().end_headers()
+
     def do_GET(self):
         if self.path.startswith('/api/load'):
             filename = self.path.split('filename=')[-1] if 'filename=' in self.path else 'world.json'

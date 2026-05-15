@@ -104,7 +104,7 @@ document.getElementById('btn-play-world').addEventListener('click', async () => 
 document.getElementById('btn-delete-world').addEventListener('click', async () => { 
     if (isWorldSelected) { 
         if (confirm('确定要删除这个世界吗？此操作无法撤销。')) {
-            await fetch('/api/delete?filename=world.json');
+            await window.deleteSave('world.json');
             await renderWorldList(); 
         }
     } 

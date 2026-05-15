@@ -190,12 +190,13 @@
                                 else if (blockType === 'door_bottom' || blockType === 'door_bottom_open') { const other = getBlock(bx, by + 1, bz); if (other === 'door_top' || other === 'door_top_open') setBlock(bx, by + 1, bz, null); }
                                 highlightBox.visible = false; miningOverlay.visible = false; highlightBox.scale.setScalar(1); 
                                 if (drops && gameMode === 1) { 
-                                    if (blockType === 'stone' && Math.random() < 0.1) { addBlockToInventory('flint'); addBlockToInventory('stone'); } 
-                                    else if (blockType === 'coal_ore') addBlockToInventory('coal');
-                                    else if (blockType === 'diamond_ore') addBlockToInventory('diamond');
-                                    else if (blockType === 'bed_head' || blockType === 'bed_foot') { addBlockToInventory('bed'); } 
-                                    else if (blockType === 'door_top' || blockType === 'door_bottom' || blockType === 'door_top_open' || blockType === 'door_bottom_open') { addBlockToInventory('door'); }
-                                    else addBlockToInventory(blockType); 
+                                    const dropX = bx + 0.5; const dropY = by + 0.5; const dropZ = bz + 0.5;
+                                    if (blockType === 'stone' && Math.random() < 0.1) { spawnDroppedItem(dropX, dropY, dropZ, 'flint'); spawnDroppedItem(dropX, dropY, dropZ, 'stone'); } 
+                                    else if (blockType === 'coal_ore') spawnDroppedItem(dropX, dropY, dropZ, 'coal');
+                                    else if (blockType === 'diamond_ore') spawnDroppedItem(dropX, dropY, dropZ, 'diamond');
+                                    else if (blockType === 'bed_head' || blockType === 'bed_foot') spawnDroppedItem(dropX, dropY, dropZ, 'bed');
+                                    else if (blockType === 'door_top' || blockType === 'door_bottom' || blockType === 'door_top_open' || blockType === 'door_bottom_open') spawnDroppedItem(dropX, dropY, dropZ, 'door');
+                                    else spawnDroppedItem(dropX, dropY, dropZ, blockType); 
                                 } 
                                 renderInventoryUI(); isMining = false; miningTime = 0; targetBlockKey = null; 
                             } 

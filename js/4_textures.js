@@ -1,40 +1,80 @@
         // ==========================================
-        const CACHE_V = Date.now();
+        // 独立环境检测（双重保险）
+        const isLocalMode = (window.location.protocol === 'file:');
+        const CACHE_V = isLocalMode ? "" : ("?v=" + Date.now());
         const itemPixels = {};
         const textureLoader = new THREE.TextureLoader();
+        if (isLocalMode) textureLoader.setCrossOrigin('anonymous');
+        
         const destroyStages = [];
         for (let i = 0; i <= 9; i++) {
-            const t = textureLoader.load('textures/destroy_stage_' + i + '.png?v=' + CACHE_V);
-            t.magFilter = THREE.NearestFilter;
-            destroyStages.push(new THREE.MeshBasicMaterial({ map: t, transparent: true, alphaTest: 0.1, polygonOffset: true, polygonOffsetFactor: -1 }));
+            const dImg = new Image();
+            const dt = new THREE.Texture(dImg);
+            dImg.onload = () => { dt.needsUpdate = true; };
+            dImg.src = 'textures/destroy_stage_' + i + '.png' + CACHE_V;
+            dt.magFilter = THREE.NearestFilter;
+            destroyStages.push(new THREE.MeshBasicMaterial({ map: dt, transparent: true, alphaTest: 0.1, polygonOffset: true, polygonOffsetFactor: -1 }));
         }
         function createPixelTexture(type) {
             const fileName = (type === 'door') ? 'oak_door' : type;
-            const path = 'textures/' + fileName + '.png?v=' + CACHE_V;
-            const texture = textureLoader.load(path, (tex) => {
-                const canvas = document.createElement('canvas'); canvas.width = 16; canvas.height = 16;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(tex.image, 0, 0, 16, 16);
-                
-                // Populate itemPixels for 3D hand items
-                const imgData = ctx.getImageData(0, 0, 16, 16);
-                itemPixels[type] = new Uint8ClampedArray(imgData.data);
-                
-                // Tint icon if needed
-                const tintTypes = { grass: 0x77ab43, grass_top: 0x77ab43, tall_grass: 0x77ab43, leaves: 0x48b518, water: 0x3f76e4 };
-                if (tintTypes[type]) {
-                    ctx.globalCompositeOperation = 'multiply';
-                    const c = tintTypes[type];
-                    ctx.fillStyle = `rgb(${(c>>16)&255}, ${(c>>8)&255}, ${c&255})`;
-                    ctx.fillRect(0, 0, 16, 16);
-                    ctx.globalCompositeOperation = 'destination-atop';
-                    ctx.drawImage(tex.image, 0, 0, 16, 16);
-                    icons[type] = canvas.toDataURL();
+            const path = 'textures/' + fileName + '.png' + CACHE_V;
+            
+            const img = new Image();
+            const texture = new THREE.Texture(img);
+            img.onload = () => {
+                // 针对新版 Three.js 的深度更新
+                if (texture.source) texture.source.needsUpdate = true;
+                try {
+                    const canvas = document.createElement('canvas'); canvas.width = 16; canvas.height = 16;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, 16, 16);
+                    
+                    // Populate itemPixels for 3D hand items
+                    const imgData = ctx.getImageData(0, 0, 16, 16);
+                    itemPixels[type] = new Uint8ClampedArray(imgData.data);
+                    
+                    // 染色逻辑：草(顶面和侧面)、叶子、水
+                    const tintTypes = { 
+                        grass: 0x77ab43, 
+                        grass_top: 0x77ab43, 
+                        grass_side: 0x77ab43, // 新增：修复侧面黑白Bug
+                        tall_grass: 0x77ab43, 
+                        leaves: 0x48b518, 
+                        water: 0x3f76e4 
+                    };
+                    if (tintTypes[type]) {
+                        // 应用染色到像素数据（用于手持3D模型）
+                        const c = tintTypes[type];
+                        const r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
+                        for (let i = 0; i < itemPixels[type].length; i += 4) {
+                            itemPixels[type][i] = (itemPixels[type][i] * r) / 255;
+                            itemPixels[type][i+1] = (itemPixels[type][i+1] * g) / 255;
+                            itemPixels[type][i+2] = (itemPixels[type][i+2] * b) / 255;
+                        }
+                        
+                        // 应用染色到 Canvas（用于 UI 图标）
+                        ctx.clearRect(0, 0, 16, 16);
+                        ctx.drawImage(img, 0, 0, 16, 16);
+                        ctx.globalCompositeOperation = 'multiply';
+                        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                        ctx.fillRect(0, 0, 16, 16);
+                        ctx.globalCompositeOperation = 'destination-atop';
+                        ctx.drawImage(img, 0, 0, 16, 16);
+                        icons[type] = canvas.toDataURL();
+                    } else {
+                        icons[type] = canvas.toDataURL();
+                    }
+                } catch (e) {
+                    console.warn("Canvas texture processing skipped (CORS/Security):", type);
+                    if (!icons[type]) icons[type] = path;
                 }
-
+                
+                texture.needsUpdate = true;
                 if (typeof updateHeldItem3D === 'function') updateHeldItem3D();
                 if (typeof renderInventoryUI === 'function') renderInventoryUI();
-            });
+            };
+            img.src = path;
+
             texture.magFilter = THREE.NearestFilter;
             texture.minFilter = THREE.NearestFilter;
             texture.colorSpace = THREE.SRGBColorSpace;
@@ -67,7 +107,16 @@
             door_top: (function(){ const g = new THREE.BoxGeometry(1, 1, 0.1); g.translate(0, 0, -0.45); return g; })(),
             door_bottom: (function(){ const g = new THREE.BoxGeometry(1, 1, 0.1); g.translate(0, 0, -0.45); return g; })(),
             door_top_open: (function(){ const g = new THREE.BoxGeometry(0.1, 1, 1); g.translate(-0.45, 0, 0); return g; })(),
-            door_bottom_open: (function(){ const g = new THREE.BoxGeometry(0.1, 1, 1); g.translate(-0.45, 0, 0); return g; })()
+            door_bottom_open: (function(){ const g = new THREE.BoxGeometry(0.1, 1, 1); g.translate(-0.45, 0, 0); return g; })(),
+            water_low: new THREE.BoxGeometry(1, 1, 1),
+            water_high: new THREE.BoxGeometry(1.002, 1.002, 1.002),
+            // 修正：确保所有水面法线全部朝向外部
+            water_top: new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2).translate(0, 0.5, 0),
+            water_bottom: new THREE.PlaneGeometry(1, 1).rotateX(Math.PI / 2).translate(0, -0.5, 0),
+            water_north: new THREE.PlaneGeometry(1, 1).rotateY(Math.PI).translate(0, 0, -0.5), // 修正旋转
+            water_south: new THREE.PlaneGeometry(1, 1).translate(0, 0, 0.5),                   // 修正旋转
+            water_east: new THREE.PlaneGeometry(1, 1).rotateY(Math.PI / 2).translate(0.5, 0, 0),
+            water_west: new THREE.PlaneGeometry(1, 1).rotateY(-Math.PI / 2).translate(-0.5, 0, 0)
         };
         const materials = {
             grass: [

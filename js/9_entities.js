@@ -138,7 +138,8 @@
                 type: 'cow', mesh: cGroup, hp: 10, legs: legs, state: 'idle', timer: 0, velocity: new THREE.Vector3(), target: new THREE.Vector3(),
                 update: function (delta, time) {
                     if (this.hp <= 0) { 
-                        addBlockToInventory('raw_beef', Math.floor(Math.random() * 2) + 1); addBlockToInventory('leather', Math.floor(Math.random() * 2)); renderInventoryUI(); 
+                        spawnDroppedItem(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z, 'raw_beef', Math.floor(Math.random() * 2) + 1);
+                        spawnDroppedItem(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z, 'leather', Math.floor(Math.random() * 2));
                         for(let i=0; i<3 * 4; i++) spawnXPOrb(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z, 2);
                         return true; 
                     }
@@ -182,7 +183,7 @@
                 type: 'pig', mesh: pGroup, hp: 10, legs: legs, state: 'idle', timer: 0, velocity: new THREE.Vector3(), target: new THREE.Vector3(),
                 update: function (delta, time) {
                     if (this.hp <= 0) { 
-                        addBlockToInventory('raw_porkchop', 1); renderInventoryUI(); 
+                        spawnDroppedItem(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z, 'raw_porkchop', 1);
                         for(let i=0; i<2 * 4; i++) spawnXPOrb(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z, 1);
                         return true; 
                     }
@@ -227,7 +228,7 @@
                 type: 'zombie', mesh: zGroup, legs: legs, hp: 20, velocity: new THREE.Vector3(), burnTimer: 0,
                 update: function (delta, time, sunHeight, isNight) {
                     if (this.hp <= 0) { 
-                        addBlockToInventory('rotten_flesh', 1); renderInventoryUI(); 
+                        spawnDroppedItem(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z, 'rotten_flesh', 1);
                         for(let i=0; i<5 * 4; i++) spawnXPOrb(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z, 3);
                         return true; 
                     }
@@ -273,7 +274,7 @@
                 type: 'spider', mesh: spGroup, legs: legs, hp: 16, velocity: new THREE.Vector3(), target: new THREE.Vector3(), state: 'idle', timer: 0,
                 update: function (delta, time) {
                     if (this.hp <= 0) { 
-                        addBlockToInventory('string', Math.floor(Math.random() * 2) + 5); renderInventoryUI(); 
+                        spawnDroppedItem(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z, 'string', Math.floor(Math.random() * 2) + 5);
                         for(let i=0; i<5 * 4; i++) spawnXPOrb(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z, 2);
                         return true; 
                     }
@@ -324,7 +325,7 @@
                 type: 'blaze', mesh: bGroup, rods: rods, hp: 20, velocity: new THREE.Vector3(), targetY: y + 2,
                 update: function (delta, time) {
                     if (this.hp <= 0) { 
-                        addBlockToInventory('blaze_rod', Math.floor(Math.random() * 2) + 2); renderInventoryUI(); 
+                        spawnDroppedItem(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z, 'blaze_rod', Math.floor(Math.random() * 2) + 2);
                         for(let i=0; i<10 * 4; i++) spawnXPOrb(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z, 5);
                         return true; 
                     }
@@ -370,7 +371,7 @@
                 type: 'enderman', mesh: eGroup, legs: legs, arms: [armL, armR], hp: 40, velocity: new THREE.Vector3(), state: 'idle', target: new THREE.Vector3(), timer: 0,
                 update: function (delta, time) {
                     if (this.hp <= 0) { 
-                        addBlockToInventory('ender_pearl', 1); renderInventoryUI(); 
+                        spawnDroppedItem(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z, 'ender_pearl', 1);
                         for(let i=0; i<8 * 4; i++) spawnXPOrb(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z, 5);
                         return true; 
                     }
@@ -480,29 +481,68 @@
         }
 
         var spawnXPOrb = function(x, y, z, value) {
-            // 使用球形几何体，更像原版经验球，尺寸与末影之眼接近
-            const orbMesh = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 8), new THREE.MeshLambertMaterial({ color: 0x7fff00, emissive: 0x7fff00 }));
-            orbMesh.position.set(x, y, z);
-            scene.add(orbMesh);
+            // ... (existing code) ...
+        }
+        window.spawnXPOrb = spawnXPOrb;
+
+        // --- 新增：3D 掉落物系统 ---
+        function spawnDroppedItem(x, y, z, type, count = 1, velocity = null) {
+            if (!type || type === 'null') return;
             
+            // 创建掉落物模型：方块用 0.3 的小方块，普通物品用薄片
+            let geo;
+            const isBlock = ITEMS[type] && ITEMS[type].type === 'block';
+            if (isBlock) {
+                geo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+            } else {
+                geo = new THREE.BoxGeometry(0.3, 0.3, 0.05);
+            }
+            
+            const mat = materials[type] || new THREE.MeshLambertMaterial({ color: 0xffffff });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x, y, z);
+            scene.add(mesh);
+
+            // 初始随机散开速度
+            const vel = velocity || new THREE.Vector3(
+                (Math.random() - 0.5) * 3,
+                4 + Math.random() * 2,
+                (Math.random() - 0.5) * 3
+            );
+
             entities.push({
-                type: 'xp_orb', mesh: orbMesh, value: value || 1, velocity: new THREE.Vector3((Math.random() - 0.5) * 4, 4 + Math.random() * 4, (Math.random() - 0.5) * 4),
-                life: 300,
-                update: function (delta, time) {
+                type: 'dropped_item',
+                itemType: type,
+                count: count,
+                mesh: mesh,
+                velocity: vel,
+                life: 300, // 5分钟后消失
+                pickupDelay: 0.8, // 刚丢出时不能立刻捡起
+                update: function(delta, time) {
                     this.life -= delta;
+                    if (this.pickupDelay > 0) this.pickupDelay -= delta;
                     if (this.life <= 0) return true;
 
-                    // 颜色闪烁
-                    const hue = (Math.sin(time * 15) + 1) / 2;
-                    orbMesh.material.color.setHSL(0.2 + hue * 0.1, 1, 0.5);
+                    // 旋转和悬浮动画
+                    this.mesh.rotation.y += delta * 2;
+                    this.mesh.position.y += Math.sin(time * 3) * 0.002;
 
                     const dist = this.mesh.position.distanceTo(camera.position);
-                    if (dist < 10) {
-                        // 像末影之眼一样被玩家吸引，但是没有紫色粒子
+                    
+                    // 靠近捡起逻辑
+                    if (dist < 1.5 && this.pickupDelay <= 0) {
+                        addBlockToInventory(this.itemType, this.count);
+                        renderInventoryUI();
+                        // 播放一个简单的粒子效果或提示（可选）
+                        return true;
+                    }
+
+                    // 吸引逻辑：距离小于 4 时飞向玩家
+                    if (dist < 4.0 && this.pickupDelay <= 0) {
                         const dir = new THREE.Vector3().subVectors(camera.position, this.mesh.position).normalize();
-                        const speed = Math.max(12, 25 - dist);
-                        this.velocity.lerp(dir.multiplyScalar(speed), delta * 6);
+                        this.velocity.lerp(dir.multiplyScalar(10), delta * 5);
                     } else {
+                        // 重力
                         this.velocity.y -= 15 * delta;
                         this.velocity.x *= 0.95;
                         this.velocity.z *= 0.95;
@@ -510,25 +550,20 @@
 
                     const step = this.velocity.clone().multiplyScalar(delta);
                     const nextPos = this.mesh.position.clone().add(step);
-                    
-                    if (checkCollisionGeneric(nextPos.x, nextPos.y, nextPos.z, 0.1, 0.1)) {
-                        this.velocity.y = -this.velocity.y * 0.4;
-                        this.velocity.x *= 0.4;
-                        this.velocity.z *= 0.4;
+
+                    // 简单的地面碰撞
+                    if (checkCollisionGeneric(nextPos.x, nextPos.y - 0.15, nextPos.z, 0.15, 0.1)) {
+                        this.velocity.y = 0;
+                        this.velocity.x *= 0.7;
+                        this.velocity.z *= 0.7;
                     } else {
                         this.mesh.position.copy(nextPos);
-                    }
-
-                    // 靠近玩家不到一个方块(1.2)即消失并增加经验
-                    if (dist < 1.1) {
-                        if (window.addXP) window.addXP(this.value);
-                        return true;
                     }
                     return false;
                 }
             });
         }
-        window.spawnXPOrb = spawnXPOrb;
+        window.spawnDroppedItem = spawnDroppedItem;
 
         let zombieSpawnTimer = 0; let endermanSpawnTimer = 0; let blazeSpawnTimer = 0; let pigSpawnTimer = 0;
         

@@ -187,6 +187,7 @@
             <div style="width: 400px; text-align: left; color: #a0a0a0; font-size: 14px;">自定义皮肤 (64x64 PNG):</div>
             <input type="file" id="skin-upload" class="mc-button" accept="image/png"
                 style="line-height: normal; padding-top: 5px;">
+            <div class="mc-button" id="btn-toggle-water">水面画质: 低</div>
             <div class="mc-button" id="btn-save-options">完成</div>
         </div>
 
@@ -268,10 +269,11 @@
         'js/14_main_loop.js'
     ];
 
+    const v = Date.now();
     for (const src of scripts) {
         await new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            script.src = src;
+            script.src = src + '?v=' + v;
             script.onload = resolve;
             script.onerror = () => reject(new Error('Failed to load: ' + src));
             document.body.appendChild(script);

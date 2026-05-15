@@ -168,13 +168,17 @@
                                 for(let i=0; i<xpValue * 4; i++) window.spawnXPOrb(hitMob.mesh.position.x, hitMob.mesh.position.y, hitMob.mesh.position.z, 2);
                             }
                             scene.remove(hitMob.mesh); entities.splice(entities.indexOf(hitMob), 1); 
-                            if (hitMob.type === 'pig' && gameMode === 1) addBlockToInventory('raw_porkchop', 1); 
-                            else if (hitMob.type === 'cow' && gameMode === 1) addBlockToInventory('raw_beef', 1);
-                            else if (hitMob.type === 'zombie' && gameMode === 1) addBlockToInventory('rotten_flesh', 1); 
-                            else if (hitMob.type === 'enderman' && gameMode === 1) addBlockToInventory('ender_pearl', 1); 
-                            else if (hitMob.type === 'blaze' && gameMode === 1) addBlockToInventory('blaze_rod', Math.floor(Math.random() * 2) + 2); 
-                            else if (hitMob.type === 'spider' && gameMode === 1) addBlockToInventory('string', Math.floor(Math.random() * 2) + 5); 
-                            renderInventoryUI(); 
+                            
+                            // 生物死亡掉落物逻辑
+                            if (gameMode === 1) {
+                                if (hitMob.type === 'pig') spawnDroppedItem(hitMob.mesh.position.x, hitMob.mesh.position.y, hitMob.mesh.position.z, 'raw_porkchop', 1); 
+                                else if (hitMob.type === 'cow') { spawnDroppedItem(hitMob.mesh.position.x, hitMob.mesh.position.y, hitMob.mesh.position.z, 'raw_beef', 1); spawnDroppedItem(hitMob.mesh.position.x, hitMob.mesh.position.y, hitMob.mesh.position.z, 'leather', Math.floor(Math.random() * 2)); }
+                                else if (hitMob.type === 'zombie') spawnDroppedItem(hitMob.mesh.position.x, hitMob.mesh.position.y, hitMob.mesh.position.z, 'rotten_flesh', 1); 
+                                else if (hitMob.type === 'enderman') spawnDroppedItem(hitMob.mesh.position.x, hitMob.mesh.position.y, hitMob.mesh.position.z, 'ender_pearl', 1); 
+                                else if (hitMob.type === 'blaze') spawnDroppedItem(hitMob.mesh.position.x, hitMob.mesh.position.y, hitMob.mesh.position.z, 'blaze_rod', Math.floor(Math.random() * 2) + 2); 
+                                else if (hitMob.type === 'spider') spawnDroppedItem(hitMob.mesh.position.x, hitMob.mesh.position.y, hitMob.mesh.position.z, 'string', Math.floor(Math.random() * 2) + 5); 
+                            }
+                            return; 
                         } return;
                     }
                     const p = intersect.point.clone().sub(intersect.face.normal.clone().multiplyScalar(0.01)); const bx = Math.floor(p.x); const by = Math.floor(p.y); const bz = Math.floor(p.z); const bt = getBlock(bx, by, bz); if (bt === 'end_portal' || bt === 'nether_portal' || bt === 'return_portal' || bt === 'end_portal_frame_empty') return;
@@ -203,6 +207,22 @@
             }
             if (isInventoryOpen) return;
             if (event.code.startsWith('Digit')) { const digit = parseInt(event.code.replace('Digit', '')); if (digit >= 1 && digit <= 9) { currentSlotIndex = digit - 1; renderInventoryUI(); } }
+            
+            // Q键丢弃物品逻辑
+            if (event.code === 'KeyQ' && controls.isLocked) {
+                const item = invState.hotbar[currentSlotIndex];
+                if (item && item.count > 0) {
+                    const dropPos = camera.position.clone();
+                    const dir = new THREE.Vector3();
+                    camera.getWorldDirection(dir);
+                    const throwVel = dir.clone().multiplyScalar(10).add(new THREE.Vector3(0, 2, 0));
+                    spawnDroppedItem(dropPos.x, dropPos.y - 0.5, dropPos.z, item.type, 1, throwVel);
+                    item.count--;
+                    if (item.count <= 0) invState.hotbar[currentSlotIndex] = null;
+                    renderInventoryUI();
+                }
+            }
+
             switch (event.code) { case 'ArrowUp': case 'KeyW': moveForward = true; break; case 'ArrowLeft': case 'KeyA': moveLeft = true; break; case 'ArrowDown': case 'KeyS': moveBackward = true; break; case 'ArrowRight': case 'KeyD': moveRight = true; break; case 'Space': jumpPressed = true; const now = performance.now(); if (now - lastSpacePress < 300 && gameMode === 0) { isFlying = !isFlying; velocity.y = 0; } lastSpacePress = now; break; case 'ShiftLeft': case 'ShiftRight': shiftPressed = true; break; }
         };
         const onKeyUp = function (event) { switch (event.code) { case 'ArrowUp': case 'KeyW': moveForward = false; break; case 'ArrowLeft': case 'KeyA': moveLeft = false; break; case 'ArrowDown': case 'KeyS': moveBackward = false; break; case 'ArrowRight': case 'KeyD': moveRight = false; break; case 'Space': jumpPressed = false; break; case 'ShiftLeft': case 'ShiftRight': shiftPressed = false; break; } };
@@ -227,5 +247,33 @@
             pauseScreen.style.display = 'none';
             uiLayer.style.display = 'none';
             controls.lock();
+        });
+
+        // --- 新增：画质与选项逻辑 ---
+        document.getElementById('btn-options-title')?.addEventListener('click', () => {
+            titleScreen.style.display = 'none';
+            document.getElementById('options-screen').style.display = 'flex';
+        });
+
+        document.getElementById('btn-options-pause')?.addEventListener('click', () => {
+            pauseScreen.style.display = 'none';
+            document.getElementById('options-screen').style.display = 'flex';
+        });
+
+        document.getElementById('btn-toggle-water')?.addEventListener('click', () => {
+            const nextVal = (window.waterQuality + 1) % 2;
+            window.updateWaterQuality(nextVal);
+        });
+
+        document.getElementById('btn-save-options')?.addEventListener('click', () => {
+            document.getElementById('options-screen').style.display = 'none';
+            if (isPlaying) {
+                pauseScreen.style.display = 'flex';
+            } else {
+                titleScreen.style.display = 'flex';
+            }
+            // 保存选项到本地（可选）
+            const name = document.getElementById('player-name-input').value;
+            localStorage.setItem('mc_player_name', name);
         });
         // ==========================================
