@@ -766,3 +766,31 @@ body {
             overflow: hidden;
             text-overflow: ellipsis;
         }
+
+        #save-confirm-modal {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            background: rgba(0, 0, 0, 0.9) !important;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 999999 !important;
+            pointer-events: auto !important;
+        }
+        
+        .save-confirm-box {
+            background: #333;
+            padding: 30px;
+            border: 4px solid #555;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 400px;
+            text-align: center;
+            box-shadow: 0 0 50px rgba(0,0,0,1);
+            position: relative;
+        }

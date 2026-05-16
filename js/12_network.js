@@ -99,17 +99,44 @@ document.getElementById('btn-world-back').addEventListener('click', () => { worl
 document.getElementById('btn-goto-create').addEventListener('click', () => { worldSelectScreen.style.display = 'none'; createWorldScreen.style.display = 'flex'; });
 document.getElementById('btn-cancel-create').addEventListener('click', () => { createWorldScreen.style.display = 'none'; worldSelectScreen.style.display = 'flex'; });
 document.getElementById('btn-toggle-mode').addEventListener('click', (e) => { pendingCreateMode = pendingCreateMode === 1 ? 0 : 1; e.target.innerText = `游戏模式: ${pendingCreateMode === 1 ? '生存' : '创造'}`; });
-document.getElementById('btn-confirm-create').addEventListener('click', () => { const seedStr = document.getElementById('seed-input').value.trim(); startNewGame(seedStr, pendingCreateMode); });
-document.getElementById('btn-play-world').addEventListener('click', async () => { if (isWorldSelected) await loadGame(); });
+document.getElementById('btn-confirm-create').addEventListener('click', () => { 
+    const nameStr = document.getElementById('world-name-input').value.trim() || '新的世界';
+    const seedStr = document.getElementById('seed-input').value.trim(); 
+    startNewGame(seedStr, pendingCreateMode, nameStr); 
+});
+document.getElementById('btn-play-world').addEventListener('click', async () => { if (selectedFilename) await loadGame(selectedFilename); });
 document.getElementById('btn-delete-world').addEventListener('click', async () => { 
-    if (isWorldSelected) { 
-        if (confirm('确定要删除这个世界吗？此操作无法撤销。')) {
-            await window.deleteSave('world.json');
+    if (selectedFilename) { 
+        if (confirm('确定要删除世界 "' + selectedFilename + '" 吗？此操作无法撤销。')) {
+            await window.deleteSave(selectedFilename);
+            selectedFilename = null;
             await renderWorldList(); 
         }
     } 
 });
-document.getElementById('btn-save-quit').addEventListener('click', () => { saveGame(); isPlaying = false; pauseScreen.style.display = 'none'; titleScreen.style.display = 'flex'; });
+document.getElementById('btn-export-world').addEventListener('click', () => { if (selectedFilename) exportWorld(selectedFilename); else alert("请先选择一个世界"); });
+document.getElementById('btn-import-world').addEventListener('click', () => { document.getElementById('import-input').click(); });
+document.getElementById('import-input').addEventListener('change', (e) => { const file = e.target.files[0]; if (file) importWorld(file); });
+
+document.getElementById('btn-save-quit').addEventListener('click', async () => { 
+    await saveGame(); 
+    isPlaying = false; 
+    pauseScreen.style.display = 'none'; 
+    titleScreen.style.display = 'flex';
+    // 回到标题界面后弹出提示
+    document.getElementById('save-confirm-modal').style.display = 'flex';
+});
+
+document.getElementById('btn-modal-download').addEventListener('click', async () => {
+    if (window.currentWorldName) {
+        await exportWorld(window.currentWorldName);
+        document.getElementById('save-confirm-modal').style.display = 'none';
+    }
+});
+
+document.getElementById('btn-modal-quit').addEventListener('click', () => {
+    document.getElementById('save-confirm-modal').style.display = 'none';
+});
 
 document.getElementById('btn-options-title').addEventListener('click', () => { titleScreen.style.display = 'none'; document.getElementById('options-screen').style.display = 'flex'; document.getElementById('player-name-input').value = localStorage.getItem('mc_playerName') || 'Player'; });
 document.getElementById('btn-options-pause').addEventListener('click', () => { pauseScreen.style.display = 'none'; document.getElementById('options-screen').style.display = 'flex'; document.getElementById('player-name-input').value = localStorage.getItem('mc_playerName') || 'Player'; });

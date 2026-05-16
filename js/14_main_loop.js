@@ -103,6 +103,10 @@
                 
                 const gmText = gameMode === 0 ? "创造 [双击空格飞行]" : "生存 [按 T 输入指令]";
                 document.getElementById('gamemode-display').innerText = `模式: ${gmText}`;
+                if (window.getBiome) {
+                    const b = window.getBiome(Math.floor(camera.position.x), Math.floor(camera.position.z));
+                    document.getElementById('biome-display').innerText = `群系: ${b.name}`;
+                }
             }
             directionalLight.position.set(Math.cos(theta) * 100, Math.sin(theta) * 100, Math.sin(theta) * 30);
             let isPlayerInWater = false; let isPlayerInLava = false;
@@ -149,6 +153,23 @@
                     const blockType = getBlock(bx, by, bz);
                     
                     highlightBox.visible = true;
+                    
+                    // 创造模式节奏破坏 (还原原版手感)
+                    if (gameMode === 0 && window.isLeftMouseDown) {
+                        if (creativeBreakTimer <= 0) {
+                            if (blockType && blockType !== 'bedrock' && blockType !== 'nether_portal' && blockType !== 'end_portal' && blockType !== 'return_portal' && blockType !== 'end_portal_frame_empty') {
+                                setBlock(bx, by, bz, null);
+                                // 处理双层方块
+                                if (blockType === 'bed_head' || blockType === 'bed_foot') { const targetType = blockType === 'bed_head' ? 'bed_foot' : 'bed_head'; const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]; for (let d of dirs) { if (getBlock(bx + d[0], by, bz + d[1]) === targetType) { setBlock(bx + d[0], by, bz + d[1], null); break; } } }
+                                if (blockType === 'door_top' || blockType === 'door_top_open') { const other = getBlock(bx, by - 1, bz); if (other === 'door_bottom' || other === 'door_bottom_open') setBlock(bx, by - 1, bz, null); }
+                                else if (blockType === 'door_bottom' || blockType === 'door_bottom_open') { const other = getBlock(bx, by + 1, bz); if (other === 'door_top' || other === 'door_top_open') setBlock(bx, by + 1, bz, null); }
+                                highlightBox.visible = false;
+                                creativeBreakTimer = 0.25; // 连拆间隔 0.25 秒
+                            }
+                        }
+                    }
+                    if (creativeBreakTimer > 0) creativeBreakTimer -= delta;
+
                     if (blockType === 'door_top' || blockType === 'door_bottom') {
                         highlightBox.scale.set(1, 1, 0.1);
                         highlightBox.position.set(bx + 0.5, by + 0.5, bz + 0.5 - 0.45);
@@ -167,7 +188,8 @@
                             const heldItem = invState.hotbar[currentSlotIndex]; 
                             const toolDef = heldItem ? ITEMS[heldItem.type] : null; 
                             let miningPower = 1; if (toolDef && toolDef.toolType === blockDef.tool) miningPower = toolDef.power; 
-                            const requiredTime = gameMode === 0 ? 0.05 : blockDef.hardness / miningPower; 
+                            
+                            const requiredTime = blockDef.hardness / miningPower; 
                             miningTime += delta; 
                             let progress = Math.min(miningTime / requiredTime, 1); 
                             
@@ -196,6 +218,14 @@
                                     else if (blockType === 'diamond_ore') spawnDroppedItem(dropX, dropY, dropZ, 'diamond');
                                     else if (blockType === 'bed_head' || blockType === 'bed_foot') spawnDroppedItem(dropX, dropY, dropZ, 'bed');
                                     else if (blockType === 'door_top' || blockType === 'door_bottom' || blockType === 'door_top_open' || blockType === 'door_bottom_open') spawnDroppedItem(dropX, dropY, dropZ, 'door');
+                                    else if (blockType === 'chest') {
+                                        const key = `${bx},${by},${bz}`;
+                                        if (window.chestInventories && window.chestInventories[key]) {
+                                            window.chestInventories[key].forEach(it => { if (it) spawnDroppedItem(dropX, dropY, dropZ, it.type, it.count); });
+                                            delete window.chestInventories[key];
+                                        }
+                                        spawnDroppedItem(dropX, dropY, dropZ, 'chest');
+                                    }
                                     else spawnDroppedItem(dropX, dropY, dropZ, blockType); 
                                 } 
                                 renderInventoryUI(); isMining = false; miningTime = 0; targetBlockKey = null; 

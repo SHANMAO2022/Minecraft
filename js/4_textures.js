@@ -8,16 +8,23 @@
         
         const destroyStages = [];
         for (let i = 0; i <= 9; i++) {
+            const fileName = 'destroy_stage_' + i;
+            const path = 'textures/' + fileName + '.png' + CACHE_V;
+            const source = (window.TEXTURE_DATA && window.TEXTURE_DATA[fileName]) ? window.TEXTURE_DATA[fileName] : path;
+            
             const dImg = new Image();
             const dt = new THREE.Texture(dImg);
             dImg.onload = () => { dt.needsUpdate = true; };
-            dImg.src = 'textures/destroy_stage_' + i + '.png' + CACHE_V;
+            dImg.src = source;
             dt.magFilter = THREE.NearestFilter;
             destroyStages.push(new THREE.MeshBasicMaterial({ map: dt, transparent: true, alphaTest: 0.1, polygonOffset: true, polygonOffsetFactor: -1 }));
         }
         function createPixelTexture(type) {
             const fileName = (type === 'door') ? 'oak_door' : type;
             const path = 'textures/' + fileName + '.png' + CACHE_V;
+            
+            // 优先使用 Base64 嵌入数据，以支持直接打开 index.html
+            const source = (window.TEXTURE_DATA && window.TEXTURE_DATA[fileName]) ? window.TEXTURE_DATA[fileName] : path;
             
             const img = new Image();
             const texture = new THREE.Texture(img);
@@ -40,8 +47,12 @@
                         grass_side: 0x77ab43, // 新增：修复侧面黑白Bug
                         tall_grass: 0x77ab43, 
                         leaves: 0x48b518, 
-                        water: 0x3f76e4 
+                        water: 0x3f76e4,
+                        swamp_grass: 0x4c5e31,
+                        swamp_leaves: 0x3e4d28,
+                        lily_pad: 0x1c4d06
                     };
+                    const tinted = ['grass', 'leaves', 'grass_side', 'tall_grass', 'water', 'water_top', 'water_bottom', 'water_north', 'water_south', 'water_east', 'water_west', 'swamp_grass', 'swamp_leaves', 'lily_pad'];
                     if (tintTypes[type]) {
                         // 应用染色到像素数据（用于手持3D模型）
                         const c = tintTypes[type];
@@ -73,7 +84,7 @@
                 if (typeof updateHeldItem3D === 'function') updateHeldItem3D();
                 if (typeof renderInventoryUI === 'function') renderInventoryUI();
             };
-            img.src = path;
+            img.src = source;
 
             texture.magFilter = THREE.NearestFilter;
             texture.minFilter = THREE.NearestFilter;
@@ -149,6 +160,26 @@
             end_rod: new THREE.MeshLambertMaterial({ map: createPixelTexture('end_rod'), transparent: true, alphaTest: 0.1 }),
             water: new THREE.MeshLambertMaterial({ map: createPixelTexture('water'), transparent: true, opacity: 0.6, depthWrite: false, color: 0x3f76e4 }),
             lava: new THREE.MeshLambertMaterial({ map: createPixelTexture('lava'), transparent: true, opacity: 0.9 }),
+            cactus: [
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('cactus_side') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('cactus_side') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('cactus_top') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('cactus_top') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('cactus_side') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('cactus_side') })
+            ],
+            snow: new THREE.MeshLambertMaterial({ map: createPixelTexture('snow') }),
+            ice: new THREE.MeshLambertMaterial({ map: createPixelTexture('ice'), transparent: true, opacity: 0.8 }),
+            lily_pad: new THREE.MeshLambertMaterial({ map: createPixelTexture('lily_pad'), transparent: true, alphaTest: 0.1, side: THREE.DoubleSide }),
+            swamp_grass: [
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('grass_side'), color: 0x4c5e31 }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('grass_side'), color: 0x4c5e31 }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('grass_top'), color: 0x4c5e31 }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('dirt') }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('grass_side'), color: 0x4c5e31 }),
+                new THREE.MeshLambertMaterial({ map: createPixelTexture('grass_side'), color: 0x4c5e31 })
+            ],
+            swamp_leaves: new THREE.MeshLambertMaterial({ map: createPixelTexture('leaves'), transparent: true, alphaTest: 0.1, color: 0x3e4d28 }),
             end_portal_frame_empty: [
                 new THREE.MeshLambertMaterial({ map: createPixelTexture('end_portal_frame_side') }),
                 new THREE.MeshLambertMaterial({ map: createPixelTexture('end_portal_frame_side') }),
@@ -216,7 +247,12 @@
                 return [mat, mat, trans, trans, mat, mat];
             })()
         };
-        ['dirt', 'stone', 'bedrock', 'sand', 'planks', 'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore', 'obsidian', 'netherrack', 'magma', 'end_stone', 'stone_brick'].forEach(k => { if (!materials[k]) materials[k] = new THREE.MeshLambertMaterial({ map: createPixelTexture(k) }); });
+        // 确保所有物品（包括非方块）都有对应的材质，用于掉落物和 3D 手持显示
+        allItemTypes.forEach(k => { 
+            if (!materials[k]) {
+                materials[k] = new THREE.MeshLambertMaterial({ map: createPixelTexture(k), transparent: true, alphaTest: 0.1 });
+            }
+        });
         
         const icons = {}; 
         for (let key of allItemTypes) { 

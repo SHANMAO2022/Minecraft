@@ -1,17 +1,32 @@
         // ==========================================
-        let mcSeed = parseFloat(localStorage.getItem('mc_seed'));
-        if (isNaN(mcSeed)) { mcSeed = Math.random(); localStorage.setItem('mc_seed', mcSeed); }
-        let currentSeed = mcSeed;
-        let noise2D, noise3D;
+        window.currentWorldName = '';
+        window.mcSeed = parseFloat(localStorage.getItem('mc_seed'));
+        if (isNaN(window.mcSeed)) { window.mcSeed = Math.random(); localStorage.setItem('mc_seed', window.mcSeed); }
+        let currentSeed = window.mcSeed;
+        let noise2D, noise3D, biomeNoise;
         function initNoise() {
-            currentSeed = mcSeed;
+            currentSeed = window.mcSeed;
             function seededRandom() { let x = Math.sin(currentSeed++) * 10000; return x - Math.floor(x); }
             noise2D = createNoise2D(seededRandom);
             noise3D = createNoise3D(seededRandom);
+            biomeNoise = createNoise2D(() => { let x = Math.sin(window.mcSeed + 0.123) * 10000; return x - Math.floor(x); });
         }
         initNoise();
 
-        let modifiedBlocks = JSON.parse(localStorage.getItem('mc_mods')) || { overworld: {}, nether: {}, end: {} };
+        window.getBiome = (gx, gz) => {
+            if (currentDimension !== 'overworld') return { name: currentDimension === 'nether' ? '下界' : '末地' };
+            const bv = (biomeNoise(gx * 0.005, gz * 0.005) + 1) / 2;
+            if (bv < 0.1) return { name: '海洋', hMult: 0.5, hBase: -10, top: 'sand', sub: 'sand' };
+            if (bv < 0.2) return { name: '冰川', hMult: 0.8, hBase: 2, top: 'snow', sub: 'ice' };
+            if (bv < 0.35) return { name: '沙漠', hMult: 0.6, hBase: 1, top: 'sand', sub: 'sand' };
+            if (bv < 0.45) return { name: '河流', hMult: 0.3, hBase: -3, top: 'dirt', sub: 'dirt' };
+            if (bv < 0.55) return { name: '沼泽', hMult: 0.4, hBase: -1, top: 'swamp_grass', sub: 'dirt' };
+            if (bv < 0.8) return { name: '平原', hMult: 0.8, hBase: 0, top: 'grass', sub: 'dirt' };
+            if (bv < 0.95) return { name: '树林', hMult: 1.2, hBase: 2, top: 'grass', sub: 'dirt' };
+            return { name: '高山', hMult: 2.5, hBase: 10, top: 'stone', sub: 'stone' };
+        };
+
+        window.modifiedBlocks = { overworld: {}, nether: {}, end: {} };
 
         const chunkSize = 16;
         let playerInvulnTimer = 0; let gameStartTime = 0; let isSpawnImmunity = true; let highestY = 20; let isFalling = false;
@@ -47,67 +62,108 @@
     window.currentFurnacePos = null;
     // ==========================================
 
-    // 智能环境检测：如果是直接打开文件(file://)或使用无需Python的绿色启动器(8001端口)，则使用本地存储
-    window.isLocalFile = (window.location.protocol === 'file:' || window.location.port === '8001');
-
+    // 极简存档系统：仅记录种子、修改的方块坐标和玩家信息，大幅减少存储占用
     window.saveToFile = async function(filename, content) {
-        if (window.isLocalFile) {
-            localStorage.setItem('mc_file_' + filename, JSON.stringify(content));
-            return { status: 'success' };
-        }
         try {
-            const response = await fetch('/api/save', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ filename, content })
-            });
-            return await response.json();
-        } catch (e) { console.error("Save failed:", e); }
+            if (!filename) return { status: 'error', message: '文件名不能为空' };
+            const key = 'mc_sv3_' + filename;
+            
+            // 数据压缩：将方块名称转换为数字 ID
+            const compressedMods = { o: {}, n: {}, e: {} };
+            const dimMap = { overworld: 'o', nether: 'n', end: 'e' };
+            
+            for (let dim in content.mods) {
+                const targetDim = dimMap[dim];
+                for (let pos in content.mods[dim]) {
+                    const type = content.mods[dim][pos];
+                    if (type === 'null') {
+                        compressedMods[targetDim][pos] = -1; // -1 代表空气/破坏
+                    } else {
+                        const id = blockTypes.indexOf(type);
+                        if (id !== -1) compressedMods[targetDim][pos] = id;
+                    }
+                }
+            }
+
+            const optimizedData = {
+                v: 3, // 版本号
+                s: content.seed,
+                m: compressedMods,
+                p: content.player,
+                c: content.chests,
+                f: content.furnaces,
+                meta: content.metadata
+            };
+
+            localStorage.setItem(key, JSON.stringify(optimizedData));
+            console.log(`存档成功: ${filename} (压缩后尺寸: ${Math.round(JSON.stringify(optimizedData).length / 1024)} KB)`);
+            return { status: 'success' };
+        } catch (e) {
+            console.error("Save failed:", e);
+            if (e.name === 'QuotaExceededError') alert("存档失败：浏览器空间已满，请导出并清理旧存档！");
+            return { status: 'error', message: e.message };
+        }
     };
 
     window.loadFromFile = async function(filename) {
-        if (window.isLocalFile) {
-            const data = localStorage.getItem('mc_file_' + filename);
-            return data ? JSON.parse(data) : null;
-        }
         try {
-            const response = await fetch('/api/load?filename=' + filename);
-            if (response.ok) {
-                const data = await response.json();
-                return data.content;
+            const key = 'mc_sv3_' + filename;
+            const raw = localStorage.getItem(key);
+            if (!raw) return null;
+            const data = JSON.parse(raw);
+            
+            // 如果是旧版本或未压缩数据，直接返回
+            if (data.v !== 3) return data;
+
+            // 数据解压：将数字 ID 转回方块名称
+            const decompressedMods = { overworld: {}, nether: {}, end: {} };
+            const dimMap = { o: 'overworld', n: 'nether', e: 'end' };
+            
+            for (let dimKey in data.m) {
+                const targetDim = dimMap[dimKey];
+                for (let pos in data.m[dimKey]) {
+                    const id = data.m[dimKey][pos];
+                    if (id === -1) {
+                        decompressedMods[targetDim][pos] = 'null';
+                    } else {
+                        decompressedMods[targetDim][pos] = blockTypes[id];
+                    }
+                }
             }
-        } catch (e) { console.error("Load failed:", e); }
-        return null;
+
+            return {
+                seed: data.s,
+                mods: decompressedMods,
+                player: data.p,
+                chests: data.c,
+                furnaces: data.f,
+                metadata: data.meta
+            };
+        } catch (e) {
+            console.error("Load failed:", e);
+            return null;
+        }
     };
 
     window.listSaves = async function() {
-        if (window.isLocalFile) {
-            const files = [];
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key.startsWith('mc_file_')) {
-                    files.push(key.replace('mc_file_', ''));
-                }
+        const files = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key.startsWith('mc_sv3_')) {
+                files.push(key.replace('mc_sv3_', ''));
             }
-            return files;
         }
-        try {
-            const response = await fetch('/api/list');
-            if (response.ok) {
-                const data = await response.json();
-                return data.files;
-            }
-        } catch (e) { console.error("List failed:", e); }
-        return [];
+        return files;
     };
 
     window.deleteSave = async function(filename) {
-        if (window.isLocalFile) {
-            localStorage.removeItem('mc_file_' + filename);
-            return { status: 'success' };
-        }
-        try {
-            const response = await fetch('/api/delete?filename=' + filename);
-            return await response.json();
-        } catch (e) { console.error("Delete failed:", e); }
-    };
+        localStorage.removeItem('mc_sv3_' + filename);
+        return { status: 'success' };
+    };
+
+window.isLeftMouseDown = false;
+window.addEventListener('mousedown', (e) => { if (e.button === 0) window.isLeftMouseDown = true; });
+window.addEventListener('mouseup', (e) => { if (e.button === 0) window.isLeftMouseDown = false; });
+window.addEventListener('blur', () => { window.isLeftMouseDown = false; });
+
+window.creativeBreakTimer = 0;

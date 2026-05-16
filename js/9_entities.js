@@ -6,9 +6,19 @@
         const mobTexLoader = new THREE.TextureLoader();
         const mobTexs = {};
         ['zombie', 'pig', 'spider', 'enderman', 'blaze', 'dragon', 'end_crystal', 'cow'].forEach(m => {
-            mobTexs[m] = mobTexLoader.load('textures/' + m + '.png?v=' + CACHE_V);
-            mobTexs[m].magFilter = THREE.NearestFilter;
-            mobTexs[m].colorSpace = THREE.SRGBColorSpace;
+            if (window.TEXTURE_DATA && window.TEXTURE_DATA[m]) {
+                const img = new Image();
+                const tex = new THREE.Texture(img);
+                img.onload = () => { tex.needsUpdate = true; };
+                img.src = window.TEXTURE_DATA[m];
+                tex.magFilter = THREE.NearestFilter;
+                tex.colorSpace = THREE.SRGBColorSpace;
+                mobTexs[m] = tex;
+            } else {
+                mobTexs[m] = mobTexLoader.load('textures/' + m + '.png?v=' + CACHE_V);
+                mobTexs[m].magFilter = THREE.NearestFilter;
+                mobTexs[m].colorSpace = THREE.SRGBColorSpace;
+            }
         });
 
         function getMobPartMats(mob, ox, oy, w, h, d, tw = 64, th = 32) {
@@ -481,8 +491,36 @@
         }
 
         var spawnXPOrb = function(x, y, z, value) {
-            // ... (existing code) ...
-        }
+            const xpMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.15, 0), new THREE.MeshBasicMaterial({ color: 0x55ff55, wireframe: true }));
+            xpMesh.position.set(x, y, z);
+            scene.add(xpMesh);
+            entities.push({
+                type: 'xp', mesh: xpMesh, xpValue: value, velocity: new THREE.Vector3((Math.random()-0.5)*4, 5+Math.random()*3, (Math.random()-0.5)*4), life: 300,
+                update: function(delta, time) {
+                    this.life -= delta; if (this.life <= 0) return true;
+                    this.mesh.rotation.y += delta * 5;
+                    const dist = this.mesh.position.distanceTo(camera.position);
+                    if (dist < 1.5) {
+                        currentXP += this.xpValue;
+                        if (currentXP >= (currentLevel + 1) * 100) { currentXP -= (currentLevel + 1) * 100; currentLevel++; }
+                        updateStatusUI(); return true;
+                    }
+                    if (dist < 6.0) {
+                        const dir = new THREE.Vector3().subVectors(camera.position, this.mesh.position).normalize();
+                        this.velocity.lerp(dir.multiplyScalar(12), delta * 4);
+                    } else {
+                        this.velocity.y -= 15 * delta;
+                        this.velocity.x *= 0.98; this.velocity.z *= 0.98;
+                    }
+                    const step = this.velocity.clone().multiplyScalar(delta);
+                    const nextPos = this.mesh.position.clone().add(step);
+                    if (checkCollisionGeneric(nextPos.x, nextPos.y-0.1, nextPos.z, 0.1, 0.1)) {
+                        this.velocity.y = 0; this.velocity.x *= 0.8; this.velocity.z *= 0.8;
+                    } else { this.mesh.position.copy(nextPos); }
+                    return false;
+                }
+            });
+        };
         window.spawnXPOrb = spawnXPOrb;
 
         // --- 新增：3D 掉落物系统 ---

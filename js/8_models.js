@@ -3,7 +3,10 @@ function buildPlayerMesh(skinDataURL, playerName) {
     const group = new THREE.Group();
     const img = new Image();
     img.crossOrigin = "Anonymous";
-    img.src = skinDataURL || 'textures/steve.png';
+    
+    // 使用 Base64 嵌入数据
+    const defaultSkin = (window.TEXTURE_DATA && window.TEXTURE_DATA['steve']) ? window.TEXTURE_DATA['steve'] : 'textures/steve.png';
+    img.src = skinDataURL || defaultSkin;
     
     img.onload = () => {
         function getTex(x, y, tw, th) {

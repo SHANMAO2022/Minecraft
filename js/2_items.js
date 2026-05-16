@@ -1,6 +1,7 @@
         // ==========================================
         const ITEM_NAMES = {
-            grass: "草方块", dirt: "泥土", sand: "沙子", leaves: "树叶", tall_grass: "高草丛", log: "橡木原木", planks: "橡木木板", glass: "玻璃", stone: "石头", coal_ore: "煤矿石", iron_ore: "铁矿石", gold_ore: "金矿石", diamond_ore: "钻石矿石", bedrock: "基岩", water: "水", lava: "熔岩", crafting_table: "工作台", furnace: "熔炉", end_rod: "末地烛", obsidian: "黑曜石", nether_portal: "下界传送门", netherrack: "下界岩", magma: "岩浆块", end_stone: "末地石", end_portal_frame_empty: "末地传送门框架", end_portal_frame_filled: "激活的传送门框架", end_portal: "末地传送门", stone_brick: "石砖", return_portal: "返回传送门", 
+            grass: "草方块", dirt: "泥土", sand: "沙子", leaves: "树叶", tall_grass: "高草丛", log: "橡木原木", planks: "橡木木板", glass: "玻璃", stone: "石头", coal_ore: "煤矿石", iron_ore: "铁矿石", gold_ore: "金矿石", diamond_ore: "钻石矿石", bedrock: "基岩", water: "水", lava: "熔岩", crafting_table: "工作台", furnace: "熔炉", end_rod: "末地烛", obsidian: "黑曜石", nether_portal: "下界传送门", netherrack: "下界岩", magma: "岩浆块", nether_bricks: "下界砖块", spawner: "刷怪笼", end_stone: "末地石", end_portal_frame_empty: "末地传送门框架", end_portal_frame_filled: "激活的传送门框架", end_portal: "末地传送门", stone_brick: "石砖", return_portal: "返回传送门", 
+            snow: "雪", ice: "冰", cactus: "仙人掌", lily_pad: "睡莲", swamp_grass: "沼泽草方块", swamp_leaves: "沼泽树叶",
             wooden_pickaxe: "木镐", stone_pickaxe: "石镐", iron_pickaxe: "铁镐", gold_pickaxe: "金镐", diamond_pickaxe: "钻石镐", 
             wooden_sword: "木剑", stone_sword: "石剑", iron_sword: "铁剑", golden_sword: "金剑", diamond_sword: "钻石剑",
             wooden_axe: "木斧", stone_axe: "石斧", iron_axe: "铁斧", golden_axe: "金斧", diamond_axe: "钻石斧",
@@ -24,9 +25,13 @@
             end_rod: { type: 'block', hardness: 0.1, tool: 'none', tier: 0 },
             obsidian: { type: 'block', hardness: 50.0, tool: 'pickaxe', tier: 3 }, nether_portal: { type: 'block', hardness: Infinity, tool: 'none', tier: 0 },
             netherrack: { type: 'block', hardness: 0.4, tool: 'pickaxe', tier: 1 }, magma: { type: 'block', hardness: 0.5, tool: 'pickaxe', tier: 1 },
+            nether_bricks: { type: 'block', hardness: 2.0, tool: 'pickaxe', tier: 1 }, spawner: { type: 'block', hardness: 5.0, tool: 'pickaxe', tier: 1 },
             end_stone: { type: 'block', hardness: 3.0, tool: 'pickaxe', tier: 1 }, end_portal_frame_empty: { type: 'block', hardness: Infinity, tool: 'none', tier: 0 },
             end_portal_frame_filled: { type: 'block', hardness: Infinity, tool: 'none', tier: 0 }, end_portal: { type: 'block', hardness: Infinity, tool: 'none', tier: 0 },
             stone_brick: { type: 'block', hardness: 2.5, tool: 'pickaxe', tier: 1 }, return_portal: { type: 'block', hardness: Infinity, tool: 'none', tier: 0 },
+            snow: { type: 'block', hardness: 0.1, tool: 'none', tier: 0 }, ice: { type: 'block', hardness: 0.5, tool: 'none', tier: 0 }, 
+            cactus: { type: 'block', hardness: 0.4, tool: 'none', tier: 0 }, lily_pad: { type: 'block', hardness: 0.01, tool: 'none', tier: 0 },
+            swamp_grass: { type: 'block', hardness: 0.6, tool: 'none', tier: 0 }, swamp_leaves: { type: 'block', hardness: 0.2, tool: 'none', tier: 0 },
             
             wooden_pickaxe: { type: 'tool', toolType: 'pickaxe', tier: 1, power: 4 }, stone_pickaxe: { type: 'tool', toolType: 'pickaxe', tier: 2, power: 8 },
             iron_pickaxe: { type: 'tool', toolType: 'pickaxe', tier: 3, power: 15 }, gold_pickaxe: { type: 'tool', toolType: 'pickaxe', tier: 3, power: 25 },
@@ -52,12 +57,14 @@
             door: { type: 'item' }
         };
 
-        const blockTypes = ['grass', 'dirt', 'stone', 'bedrock', 'log', 'leaves', 'tall_grass', 'sand', 'planks', 'glass', 'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore', 'obsidian', 'nether_portal', 'netherrack', 'magma', 'end_stone', 'end_portal_frame_empty', 'end_portal_frame_filled', 'end_portal', 'stone_brick', 'return_portal', 'water', 'lava', 'crafting_table', 'furnace', 'end_rod', 'torch', 'bed', 'bed_head', 'bed_foot', 'chest', 'door_top', 'door_bottom', 'door_top_open', 'door_bottom_open'];
+        const blockTypes = ['grass', 'swamp_grass', 'dirt', 'stone', 'bedrock', 'log', 'leaves', 'swamp_leaves', 'tall_grass', 'sand', 'planks', 'glass', 'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore', 'obsidian', 'nether_portal', 'netherrack', 'magma', 'nether_bricks', 'spawner', 'end_stone', 'end_portal_frame_empty', 'end_portal_frame_filled', 'end_portal', 'stone_brick', 'return_portal', 'water', 'lava', 'crafting_table', 'furnace', 'end_rod', 'torch', 'bed', 'bed_head', 'bed_foot', 'chest', 'door_top', 'door_bottom', 'door_top_open', 'door_bottom_open', 'snow', 'ice', 'cactus', 'lily_pad'];
         const itemTypes = ['wooden_pickaxe', 'stone_pickaxe', 'iron_pickaxe', 'gold_pickaxe', 'diamond_pickaxe', 'wooden_sword', 'stone_sword', 'iron_sword', 'golden_sword', 'diamond_sword', 'wooden_axe', 'stone_axe', 'iron_axe', 'golden_axe', 'diamond_axe', 'leather_helmet', 'leather_chestplate', 'leather_leggings', 'leather_boots', 'iron_helmet', 'iron_chestplate', 'iron_leggings', 'iron_boots', 'golden_helmet', 'golden_chestplate', 'golden_leggings', 'golden_boots', 'diamond_helmet', 'diamond_chestplate', 'diamond_leggings', 'diamond_boots', 'iron_ingot', 'gold_ingot', 'coal', 'diamond', 'raw_porkchop', 'cooked_porkchop', 'raw_beef', 'cooked_beef', 'leather', 'rotten_flesh', 'flint_and_steel', 'ender_pearl', 'blaze_powder', 'ender_eye', 'blaze_rod', 'bow', 'arrow', 'stick', 'string', 'flint', 'door'];
         const allItemTypes = [...blockTypes, ...itemTypes];
         const inventoryItemTypes = allItemTypes.filter(t => !['bed_head', 'bed_foot', 'door_top', 'door_bottom', 'door_top_open', 'door_bottom_open'].includes(t));
 
         const maxBlocksPerType = {}; blockTypes.forEach(t => maxBlocksPerType[t] = 2000);
         maxBlocksPerType.stone = 20000; maxBlocksPerType.netherrack = 20000; maxBlocksPerType.end_stone = 15000; maxBlocksPerType.water = 25000; maxBlocksPerType.lava = 25000; maxBlocksPerType.torch = 1000; maxBlocksPerType.bed = 100; maxBlocksPerType.bed_head = 100; maxBlocksPerType.bed_foot = 100;
+        maxBlocksPerType.nether_bricks = 5000; maxBlocksPerType.spawner = 500;
+        maxBlocksPerType.sand = 5000; maxBlocksPerType.snow = 3000; maxBlocksPerType.ice = 3000;
 
         // ==========================================

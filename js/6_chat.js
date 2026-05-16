@@ -45,6 +45,27 @@
                 else if (type === 'dragon') { spawnEnderDragon(); appendChat('已召唤 末影龙'); }
                 else { appendChat('未知生物。可召唤: pig, zombie, spider, blaze, enderman, crystal, dragon'); }
             }
+            else if (command === '/setblock') {
+                if (args.length < 5) { appendChat('用法: /setblock <x> <y> <z> <方块名>'); return; }
+                const parseCoord = (val, current) => { if (val.startsWith('~')) { return Math.floor(current + (parseFloat(val.slice(1)) || 0)); } return Math.floor(parseFloat(val)); };
+                const x = parseCoord(args[1], camera.position.x);
+                const y = parseCoord(args[2], camera.position.y);
+                const z = parseCoord(args[3], camera.position.z);
+                const type = args[4].toLowerCase();
+                if (blockTypes.includes(type)) { setBlock(x, y, z, type); appendChat(`已在 [${x}, ${y}, ${z}] 放置 ${ITEM_NAMES[type] || type}`); }
+                else if (type === 'air' || type === 'null') { setBlock(x, y, z, null); appendChat(`已在 [${x}, ${y}, ${z}] 移除方块`); }
+                else { appendChat(`未知方块: ${type}`); }
+            }
+            else if (command === '/tp') {
+                const parseCoord = (val, current) => { if (val.startsWith('~')) { return current + (parseFloat(val.slice(1)) || 0); } return parseFloat(val); };
+                if (args.length === 2) { /* tp to player logic if needed */ }
+                else if (args.length >= 4) {
+                    const x = parseCoord(args[1], camera.position.x);
+                    const y = parseCoord(args[2], camera.position.y);
+                    const z = parseCoord(args[3], camera.position.z);
+                    camera.position.set(x, y, z); velocity.set(0, 0, 0); appendChat(`已传送至 [${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)}]`);
+                }
+            }
             else { appendChat('未知指令。'); }
         }
 

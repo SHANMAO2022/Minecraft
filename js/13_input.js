@@ -156,11 +156,15 @@
             else if (event.button === 0) {
                 actionType = 'swing'; actionTimer = 0.3;
                 if (intersects.length > 0) {
-                    const intersect = intersects[0]; let hitMob = null; for (let e of entities) { if (e.mesh && e.mesh.children && e.mesh.children.includes(intersect.object)) { hitMob = e; break; } }
+                    const intersect = intersects[0]; 
+                    
+                    // 检查是否点击了生物
+                    let hitMob = null; for (let e of entities) { if (e.mesh && e.mesh.children && e.mesh.children.includes(intersect.object)) { hitMob = e; break; } }
                     if (hitMob) {
                         let dmg = (gameMode === 0) ? 999 : 2; hitMob.hp -= dmg;
                         hitMob.mesh.children.forEach(c => { if (c.material && c.material.emissive) c.material.emissive.setHex(0xaa0000); });
-                        if (hitMob.type === 'enderman') { if (hitMob.onHit) hitMob.onHit(); } else if (hitMob.type === 'crystal') { hitMob.hp = 0; } else if (hitMob.type !== 'dragon') { const kb = new THREE.Vector3().subVectors(hitMob.mesh.position, camera.position).normalize(); if (hitMob.type === 'pig') { hitMob.target.copy(hitMob.mesh.position).addScaledVector(kb, 3); hitMob.state = 'wander'; hitMob.timer = 2; } else { hitMob.mesh.position.addScaledVector(kb, 1); } }
+                        if (hitMob.type === 'enderman') { if (hitMob.onHit) hitMob.onHit(); } else if (hitMob.type === 'crystal') { hitMob.hp = 0; } else if (hitMob.type !== 'dragon') { const kb = new THREE.Vector3().subVectors(hitMob.mesh.position, camera.position).normalize(); if (hitMob.type === 'pig') { hitMob.target.copy(hitMob.mesh.position).addScaledVector(kb, 3); hitMob.state = 'wander'; hitMob.timer = 2; } else { const newPos = hitMob.mesh.position.clone().addScaledVector(kb, 1); if (!checkCollisionGeneric(newPos.x, newPos.y - 0.5, newPos.z, 0.4, 0.8)) hitMob.mesh.position.copy(newPos); } }
+                        
                         if (hitMob.hp <= 0 && hitMob.type !== 'dragon' && hitMob.type !== 'crystal') { 
                             // 掉落经验球
                             const xpValue = hitMob.type === 'pig' || hitMob.type === 'cow' ? 2 : 5;
@@ -181,7 +185,23 @@
                             return; 
                         } return;
                     }
-                    const p = intersect.point.clone().sub(intersect.face.normal.clone().multiplyScalar(0.01)); const bx = Math.floor(p.x); const by = Math.floor(p.y); const bz = Math.floor(p.z); const bt = getBlock(bx, by, bz); if (bt === 'end_portal' || bt === 'nether_portal' || bt === 'return_portal' || bt === 'end_portal_frame_empty') return;
+
+                    // 方块破坏判定
+                    const p = intersect.point.clone().sub(intersect.face.normal.clone().multiplyScalar(0.01)); 
+                    const bx = Math.floor(p.x); const by = Math.floor(p.y); const bz = Math.floor(p.z); 
+                    const bt = getBlock(bx, by, bz); 
+                    
+                    if (bt === 'end_portal' || bt === 'nether_portal' || bt === 'return_portal' || bt === 'end_portal_frame_empty') return;
+                    
+                    if (gameMode === 0) {
+                        setBlock(bx, by, bz, null);
+                        // 处理特殊方块对
+                        if (bt === 'bed_head' || bt === 'bed_foot') { const targetType = bt === 'bed_head' ? 'bed_foot' : 'bed_head'; const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]; for (let d of dirs) { if (getBlock(bx + d[0], by, bz + d[1]) === targetType) { setBlock(bx + d[0], by, bz + d[1], null); break; } } }
+                        if (bt === 'door_top' || bt === 'door_top_open') { const other = getBlock(bx, by - 1, bz); if (other === 'door_bottom' || other === 'door_bottom_open') setBlock(bx, by - 1, bz, null); }
+                        else if (bt === 'door_bottom' || bt === 'door_bottom_open') { const other = getBlock(bx, by + 1, bz); if (other === 'door_top' || other === 'door_top_open') setBlock(bx, by + 1, bz, null); }
+                        highlightBox.visible = false;
+                    }
+                    
                     isMining = true; miningTime = 0;
                 }
             }
@@ -189,11 +209,54 @@
 
         document.addEventListener('mouseup', (event) => { if (event.button === 0) { isMining = false; miningTime = 0; highlightBox.scale.setScalar(1); } });
         let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false, canJump = false;
+        const commandHistory = []; let historyIndex = -1;
+        const availableCommands = ['/gamemode', '/time', '/summon', '/setblock', '/tp'];
+        
         const onKeyDown = function (event) {
             if (isGameClear) { if (event.code === 'Space' || event.code === 'Escape') { isGameClear = false; document.getElementById('win-screen').style.display = 'none'; if (winScroller) clearInterval(winScroller); document.getElementById('credits-content').style.transform = `translateY(0px)`; switchDimension('overworld'); camera.position.set(0, 100, 0); dimensionState.overworld.playerPos = camera.position.clone(); velocity.set(0, 0, 0); highestY = 100; isFalling = false; isFlying = false; isSpawnImmunity = true; playerInvulnTimer = 5.0; jumpPressed = false; controls.lock(); } return; }
             if (isDead) return;
-            if (event.code === 'KeyT' || event.code === 'Slash') { if (controls.isLocked) { controls.unlock(); isChatOpen = true; chatContainer.style.display = 'block'; chatInput.focus(); if (event.code === 'Slash') chatInput.value = '/'; else event.preventDefault(); return; } }
-            if (isChatOpen) { if (event.code === 'Enter') { if (chatInput.value.trim() !== '') handleCommand(chatInput.value); chatInput.value = ''; chatContainer.style.display = 'none'; isChatOpen = false; controls.lock(); } else if (event.code === 'Escape') { chatInput.value = ''; chatContainer.style.display = 'none'; isChatOpen = false; controls.lock(); } return; }
+            if (event.code === 'KeyT' || event.code === 'Slash') { if (controls.isLocked) { controls.unlock(); isChatOpen = true; chatContainer.style.display = 'block'; chatInput.focus(); if (event.code === 'Slash') { chatInput.value = '/'; } else { event.preventDefault(); } return; } }
+            
+            if (isChatOpen) { 
+                if (event.code === 'Enter') { 
+                    const val = chatInput.value.trim();
+                    if (val !== '') { 
+                        handleCommand(val); 
+                        if (commandHistory[0] !== val) commandHistory.unshift(val); 
+                    } 
+                    historyIndex = -1; chatInput.value = ''; chatContainer.style.display = 'none'; isChatOpen = false; controls.lock(); 
+                } else if (event.code === 'Escape') { 
+                    historyIndex = -1; chatInput.value = ''; chatContainer.style.display = 'none'; isChatOpen = false; controls.lock(); 
+                } else if (event.code === 'ArrowUp') {
+                    if (historyIndex < commandHistory.length - 1) { historyIndex++; chatInput.value = commandHistory[historyIndex]; }
+                    event.preventDefault();
+                } else if (event.code === 'ArrowDown') {
+                    if (historyIndex > 0) { historyIndex--; chatInput.value = commandHistory[historyIndex]; }
+                    else { historyIndex = -1; chatInput.value = ''; }
+                    event.preventDefault();
+                } else if (event.code === 'Tab') {
+                    event.preventDefault();
+                    const text = chatInput.value;
+                    const parts = text.split(' ');
+                    const lastPart = parts[parts.length - 1].toLowerCase();
+                    
+                    let pool = [];
+                    if (parts.length === 1) pool = availableCommands;
+                    else if (parts[0] === '/setblock' && parts.length === 5) pool = blockTypes;
+                    else if (parts[0] === '/summon' && parts.length === 2) pool = ['pig', 'zombie', 'spider', 'blaze', 'enderman', 'crystal', 'dragon'];
+                    else if (parts[0] === '/gamemode' && parts.length === 2) pool = ['creative', 'survival'];
+                    else if (parts[0] === '/time' && parts.length === 2) pool = ['set', 'add'];
+                    else if (parts[0] === '/time' && parts[1] === 'set' && parts.length === 3) pool = ['day', 'night'];
+                    
+                    const matches = pool.filter(item => item.startsWith(lastPart));
+                    if (matches.length > 0) {
+                        const nextMatch = matches[(matches.indexOf(lastPart) + 1) % matches.length] || matches[0];
+                        parts[parts.length - 1] = nextMatch;
+                        chatInput.value = parts.join(' ');
+                    }
+                }
+                return; 
+            }
             if (event.code === 'KeyE') {
                 if (controls.isLocked) {
                     craftingMode = 2;
