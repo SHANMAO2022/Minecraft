@@ -10,7 +10,24 @@
                 if (cowSpawnTimer > 8 && !isNight && entities.filter(e => e.type === 'cow').length < 8) {
                     cowSpawnTimer = 0; const angle = Math.random() * Math.PI * 2; const r = 15 + Math.random() * 15; const sx = camera.position.x + Math.cos(angle) * r; const sz = camera.position.z + Math.sin(angle) * r; const sSurfaceY = Math.floor(noise2D(sx * 0.04, sz * 0.04) * 5); if (worldBlocks.has(`${Math.floor(sx)},${sSurfaceY},${Math.floor(sz)}`)) spawnCow(sx, sz, sSurfaceY + 1);
                 }
-                zombieSpawnTimer += delta; if (zombieSpawnTimer > 3 && entities.filter(e => e.type === 'zombie' || e.type === 'spider').length < 15) { zombieSpawnTimer = 0; const angle = Math.random() * Math.PI * 2; const r = 10 + Math.random() * 10; const sx = camera.position.x + Math.cos(angle) * r; const sz = camera.position.z + Math.sin(angle) * r; const sSurfaceY = Math.floor(noise2D(sx * 0.04, sz * 0.04) * 5); if (isNight) { if (worldBlocks.has(`${Math.floor(sx)},${sSurfaceY},${Math.floor(sz)}`)) { if (Math.random() < 0.4) spawnSpider(sx, sz, sSurfaceY + 1); else spawnZombie(sx, sz, sSurfaceY + 1); } } else if (camera.position.y < 0) { const cy = camera.position.y + (Math.random() - 0.5) * 10; if (!worldBlocks.has(`${Math.floor(sx)},${Math.floor(cy)},${Math.floor(sz)}`) && worldBlocks.has(`${Math.floor(sx)},${Math.floor(cy) - 1},${Math.floor(sz)}`)) { if (Math.random() < 0.3) spawnSpider(sx, sz, cy); else spawnZombie(sx, sz, cy); } } } endermanSpawnTimer += delta; if (endermanSpawnTimer > 5 && isNight && entities.filter(e => e.type === 'enderman').length < 3) { endermanSpawnTimer = 0; const angle = Math.random() * Math.PI * 2; const r = 15 + Math.random() * 10; const sx = camera.position.x + Math.cos(angle) * r; const sz = camera.position.z + Math.sin(angle) * r; const sSurfaceY = Math.floor(noise2D(sx * 0.04, sz * 0.04) * 5); if (worldBlocks.has(`${Math.floor(sx)},${sSurfaceY},${Math.floor(sz)}`)) spawnEnderman(sx, sz, sSurfaceY + 1); } 
+                zombieSpawnTimer += delta; if (zombieSpawnTimer > 3 && entities.filter(e => e.type === 'zombie' || e.type === 'spider').length < 15) { 
+                    zombieSpawnTimer = 0; const angle = Math.random() * Math.PI * 2; const r = 10 + Math.random() * 10; const sx = camera.position.x + Math.cos(angle) * r; const sz = camera.position.z + Math.sin(angle) * r; 
+                    const cx = Math.floor(sx / chunkSize); const cz = Math.floor(sz / chunkSize); const chunk = chunks.get(`${cx},${cz}`);
+                    let chunkHasTorch = false;
+                    if (chunk) { for (const [posKey, type] of chunk.blocks.entries()) { if (type === 'torch') { chunkHasTorch = true; break; } } }
+                    if (!chunkHasTorch) {
+                        const sSurfaceY = Math.floor(noise2D(sx * 0.04, sz * 0.04) * 5); if (isNight) { if (worldBlocks.has(`${Math.floor(sx)},${sSurfaceY},${Math.floor(sz)}`)) { if (Math.random() < 0.4) spawnSpider(sx, sz, sSurfaceY + 1); else spawnZombie(sx, sz, sSurfaceY + 1); } } else if (camera.position.y < 0) { const cy = camera.position.y + (Math.random() - 0.5) * 10; if (!worldBlocks.has(`${Math.floor(sx)},${Math.floor(cy)},${Math.floor(sz)}`) && worldBlocks.has(`${Math.floor(sx)},${Math.floor(cy) - 1},${Math.floor(sz)}`)) { if (Math.random() < 0.3) spawnSpider(sx, sz, cy); else spawnZombie(sx, sz, cy); } } 
+                    }
+                } 
+                endermanSpawnTimer += delta; if (endermanSpawnTimer > 5 && isNight && entities.filter(e => e.type === 'enderman').length < 3) { 
+                    endermanSpawnTimer = 0; const angle = Math.random() * Math.PI * 2; const r = 15 + Math.random() * 10; const sx = camera.position.x + Math.cos(angle) * r; const sz = camera.position.z + Math.sin(angle) * r; 
+                    const cx = Math.floor(sx / chunkSize); const cz = Math.floor(sz / chunkSize); const chunk = chunks.get(`${cx},${cz}`);
+                    let chunkHasTorch = false;
+                    if (chunk) { for (const [posKey, type] of chunk.blocks.entries()) { if (type === 'torch') { chunkHasTorch = true; break; } } }
+                    if (!chunkHasTorch) {
+                        const sSurfaceY = Math.floor(noise2D(sx * 0.04, sz * 0.04) * 5); if (worldBlocks.has(`${Math.floor(sx)},${sSurfaceY},${Math.floor(sz)}`)) spawnEnderman(sx, sz, sSurfaceY + 1); 
+                    }
+                } 
             }
             else if (currentDimension === 'nether') { 
                 blazeSpawnTimer += delta; 

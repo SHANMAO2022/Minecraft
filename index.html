@@ -72,6 +72,7 @@
     </div>
 
     <div id="inventory-ui">
+        <div id="btn-close-inventory" class="mc-button" style="display: none; position: absolute; top: 10px; right: 20px; width: 40px; height: 40px; line-height: 40px; padding: 0; text-align: center; font-weight: bold; background-color: #ff5555; z-index: 100;">X</div>
         <div class="inventory-top" style="display: flex; flex-direction: row; align-items: flex-start; justify-content: center; gap: 30px;">
             <div id="armor-slots" style="display: flex; flex-direction: column; gap: 8px;">
                 <div class="slot" data-container="armor" data-index="0" title="头盔" style="background-color: rgba(255,255,255,0.05); border: 2px solid #555;"></div>
@@ -134,7 +135,7 @@
     <div id="hotbar"></div>
 
     <div id="ui-layer">
-        <div id="title-screen">
+        <div id="title-screen" style="display: flex;">
             <div class="mc-logo">MINECRAFT<span>JAVA EDITION</span>
                 <div class="mc-splash">Vanilla!</div>
             </div>
@@ -187,13 +188,17 @@
         <div id="options-screen">
             <div class="mc-menu-title">选项</div>
             <div style="width: 400px; text-align: left; color: #a0a0a0; font-size: 14px;">玩家名字:</div>
-            <input type="text" id="player-name-input" class="mc-input" placeholder="输入名字" value="Player">
+            <input type="text" id="player-name-input" class="mc-input" placeholder="输入你的名字" value="Player">
             <div style="width: 400px; text-align: left; color: #a0a0a0; font-size: 14px;">自定义皮肤 (64x64 PNG):</div>
             <input type="file" id="skin-upload" class="mc-button" accept="image/png"
                 style="line-height: normal; padding-top: 5px;">
             <div class="mc-button" id="btn-toggle-water">水面画质: 低</div>
+            <div class="mc-button" id="btn-toggle-touch">触屏控制: 关</div>
+            <div class="mc-button" id="btn-toggle-shadows">超强光影: 关</div>
             <div class="mc-button" id="btn-save-options">完成</div>
         </div>
+
+
 
         <div id="multiplayer-screen">
             <div class="mc-menu-title">多人联机</div>
@@ -218,9 +223,34 @@
             </div>
             <div class="mc-row">
                 <div class="mc-button" id="btn-options-pause">选项...</div>
-                <div class="mc-button" onclick="document.getElementById('lan-setup-modal').style.display='flex'; document.getElementById('pause-screen').style.display='none';">对局域网开放</div>
+                <div class="mc-button" onclick="startLanServer()">对局域网开放</div>
             </div>
             <div class="mc-button" id="btn-save-quit">保存并退回到标题屏幕</div>
+        </div>
+    </div>
+
+    <div id="touch-ui" style="display: none;">
+        <div id="touch-pause-container">
+            <button id="touch-btn-pause" class="touch-button">II</button>
+        </div>
+        <!-- Joystick for movement -->
+        <div id="touch-joystick-container">
+            <div id="touch-joystick-base">
+                <div id="touch-joystick-stick"></div>
+            </div>
+        </div>
+        
+        <!-- Right side buttons -->
+        <div id="touch-action-buttons">
+            <div id="touch-btn-jump" class="touch-button">跳跃</div>
+            <div id="touch-btn-sneak" class="touch-button">蹲下</div>
+            <div id="touch-btn-inventory" class="touch-button">背包</div>
+        </div>
+
+        <!-- Interaction buttons -->
+        <div id="touch-interact-buttons">
+            <div id="touch-btn-place" class="touch-button">放置</div>
+            <div id="touch-btn-break" class="touch-button">破坏</div>
         </div>
     </div>
 
@@ -240,15 +270,7 @@
         </div>
     </div>
 
-    <!-- 局域网开放设置 -->
-    <div id="lan-setup-modal" class="ui-layer" style="display: none; background: rgba(0,0,0,0.8); flex-direction: column; justify-content: center; align-items: center; z-index: 200;">
-        <div style="background: #333; padding: 20px; border: 4px solid #555; display: flex; flex-direction: column; gap: 15px; width: 300px;">
-            <div style="color: white; text-align: center; font-size: 20px;">对局域网开放</div>
-            <input type="text" id="lan-room-id" placeholder="自定义房间号 (Room ID)" style="padding: 10px; font-size: 16px; background: #000; color: #fff; border: 2px solid #555;">
-            <button class="mc-button" style="width: 100%;" onclick="startLanServer()">创建房间</button>
-            <button class="mc-button" style="width: 100%;" onclick="document.getElementById('lan-setup-modal').style.display='none'">取消</button>
-        </div>
-    </div>
+    <!-- 局域网开放设置已被移除，整合到了内部快速生成逻辑中 -->
 
 <script type="importmap">
         {
@@ -300,6 +322,9 @@
             document.body.appendChild(script);
         });
     }
+
+    const titleScreen = document.getElementById('title-screen');
+
 </script>
 </body>
 </html>

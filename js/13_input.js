@@ -1,9 +1,16 @@
         // ==========================================
         controls.addEventListener('lock', () => {
             if (isInventoryOpen) { for (let i = 0; i < 9; i++) { if (invState.crafting[i]) { addBlockToInventory(invState.crafting[i].type, invState.crafting[i].count); invState.crafting[i] = null; } } invState.output = null; if (invState.dragged) { addBlockToInventory(invState.dragged.type, invState.dragged.count); invState.dragged = null; } }
-            isInventoryOpen = false; isCreativeTabOpen = false; uiLayer.style.display = 'none'; inventoryUiEl.style.display = 'none'; deathScreenEl.style.display = 'none'; tooltipEl.style.display = 'none';
+            isInventoryOpen = false; isCreativeTabOpen = false; uiLayer.style.display = 'none'; pauseScreen.style.display = 'none'; inventoryUiEl.style.display = 'none'; deathScreenEl.style.display = 'none'; tooltipEl.style.display = 'none';
             document.getElementById('crosshair').style.display = 'block'; hotbarEl.style.display = 'flex'; heldItemGroup.visible = true;
             if (gameMode !== 0) document.getElementById('status-bars').style.display = 'flex'; debugUiEl.style.display = 'block'; renderInventoryUI();
+        });
+        
+        document.addEventListener('pointerlockerror', () => {
+            if (isPlaying && !isDead && !isGameClear && !isInventoryOpen) {
+                uiLayer.style.display = 'flex';
+                pauseScreen.style.display = 'flex';
+            }
         });
 
         controls.addEventListener('unlock', () => {
@@ -18,7 +25,18 @@
         document.addEventListener('wheel', (e) => { if (!controls.isLocked) return; if (e.deltaY > 0) currentSlotIndex = (currentSlotIndex + 1) % 9; else currentSlotIndex = (currentSlotIndex - 1 + 9) % 9; renderInventoryUI(); const activeSlot = document.getElementById(`hotbar-${currentSlotIndex}`); if (activeSlot) hotbarEl.scrollTo({ left: activeSlot.offsetLeft - hotbarEl.offsetWidth / 2 + 24, behavior: 'smooth' }); });
 
         document.addEventListener('mousedown', (event) => {
-            if (isInventoryOpen) { const slotEl = event.target.closest('.slot'); if (slotEl && slotEl.id !== 'dragged-icon') handleSlotClick(slotEl.getAttribute('data-container'), parseInt(slotEl.getAttribute('data-index')), event.button); return; }
+            if (isInventoryOpen) { const slotEl = event.target.closest ? event.target.closest('.slot') : null; if (slotEl && slotEl.id !== 'dragged-icon') handleSlotClick(slotEl.getAttribute('data-container'), parseInt(slotEl.getAttribute('data-index')), event.button); return; }
+            
+            // 触屏模式下支持直接点击物品栏切换物品
+            const hotbarSlot = event.target.closest ? event.target.closest('.slot') : null;
+            if (hotbarSlot && hotbarSlot.getAttribute('data-container') === 'hotbar') {
+                const idx = parseInt(hotbarSlot.getAttribute('data-index'));
+                if (!isNaN(idx)) {
+                    currentSlotIndex = idx;
+                    renderInventoryUI();
+                    return;
+                }
+            }
             if (!controls.isLocked || isDead || isGameClear) return;
             const activeItem = invState.hotbar[currentSlotIndex];
             if (event.button === 0 && gameMode === 0) { 
@@ -307,8 +325,6 @@
         }
         // 修复：点击回到游戏按钮时显式锁定鼠标并关闭 UI
         document.getElementById('btn-resume').addEventListener('click', () => {
-            pauseScreen.style.display = 'none';
-            uiLayer.style.display = 'none';
             controls.lock();
         });
 
@@ -328,7 +344,17 @@
             window.updateWaterQuality(nextVal);
         });
 
-        document.getElementById('btn-save-options')?.addEventListener('click', () => {
+        // 初始设置光影按钮文本
+        const shadowBtn = document.getElementById('btn-toggle-shadows');
+        if (shadowBtn) {
+            shadowBtn.innerText = `超强光影: ${window.shadowsEnabled ? '开' : '关'}`;
+        }
+
+        document.getElementById('btn-toggle-shadows')?.addEventListener('click', () => {
+            window.updateShadows(!window.shadowsEnabled);
+        });
+
+        document.getElementById('btn-save-options')?.addEventListener('click', async () => {
             document.getElementById('options-screen').style.display = 'none';
             if (isPlaying) {
                 pauseScreen.style.display = 'flex';
@@ -338,5 +364,252 @@
             // 保存选项到本地（可选）
             const name = document.getElementById('player-name-input').value;
             localStorage.setItem('mc_player_name', name);
+
+            if (window.shadowToggleChanged) {
+                window.shadowToggleChanged = false;
+                if (isPlaying && typeof saveGame === 'function') {
+                    const saveIndicator = document.createElement('div');
+                    saveIndicator.style.position = 'fixed';
+                    saveIndicator.style.top = '20px';
+                    saveIndicator.style.left = '50%';
+                    saveIndicator.style.transform = 'translateX(-50%)';
+                    saveIndicator.style.background = 'rgba(0, 0, 0, 0.8)';
+                    saveIndicator.style.color = '#fff';
+                    saveIndicator.style.padding = '10px 20px';
+                    saveIndicator.style.border = '2px solid #55ff55';
+                    saveIndicator.style.fontFamily = 'monospace';
+                    saveIndicator.style.zIndex = '99999';
+                    saveIndicator.innerText = '正在保存世界并应用超强光影...';
+                    document.body.appendChild(saveIndicator);
+                    try {
+                        await saveGame();
+                    } catch (e) {
+                        console.error(e);
+                    }
+                }
+                location.reload();
+            }
         });
+
+        // --- 触屏控制逻辑 ---
+        let touchLookId = null;
+        let lastTouchX, lastTouchY;
+        let joystickTouchId = null;
+        let joystickCenter = { x: 0, y: 0 };
+        const joystickStick = document.getElementById('touch-joystick-stick');
+        const joystickBase = document.getElementById('touch-joystick-base');
+
+        function updateJoystick(touch) {
+            if (!joystickCenter.x) {
+                const rect = joystickBase.getBoundingClientRect();
+                joystickCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+            }
+            const dx = touch.clientX - joystickCenter.x;
+            const dy = touch.clientY - joystickCenter.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const maxDist = 60;
+            const ratio = Math.min(dist, maxDist) / maxDist;
+            const angle = Math.atan2(dy, dx);
+
+            const moveX = Math.cos(angle) * ratio * maxDist;
+            const moveY = Math.sin(angle) * ratio * maxDist;
+
+            joystickStick.style.transform = `translate(calc(-50% + ${moveX}px), calc(-50% + ${moveY}px))`;
+
+            // 映射到移动变量
+            const deadzone = 0.2;
+            const vx = Math.cos(angle) * ratio;
+            const vy = Math.sin(angle) * ratio;
+
+            moveForward = vy < -deadzone;
+            moveBackward = vy > deadzone;
+            moveLeft = vx < -deadzone;
+            moveRight = vx > deadzone;
+        }
+
+        joystickBase.addEventListener('pointerdown', (e) => {
+            if (!isTouchControlsEnabled) return;
+            joystickTouchId = e.pointerId;
+            const rect = joystickBase.getBoundingClientRect();
+            joystickCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+            updateJoystick(e);
+            joystickBase.setPointerCapture(e.pointerId);
+            e.preventDefault();
+        });
+
+        document.addEventListener('pointermove', (e) => {
+            if (!isTouchControlsEnabled) return;
+            if (e.pointerId === joystickTouchId) {
+                updateJoystick(e);
+            } else if (e.pointerId === touchLookId) {
+                const dx = e.clientX - lastTouchX;
+                const dy = e.clientY - lastTouchY;
+                
+                const totalDist = Math.abs(e.clientX - touchLookStartX) + Math.abs(e.clientY - touchLookStartY);
+                if (totalDist > 10 && !touchIsMining) {
+                    touchLookMoved = true;
+                    clearTimeout(touchHoldTimer);
+                }
+
+                // 模拟视角转动
+                camera.rotation.y -= dx * 0.005;
+                camera.rotation.x -= dy * 0.005;
+                camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
+                
+                lastTouchX = e.clientX;
+                lastTouchY = e.clientY;
+            }
+        });
+
+        let touchLookStartX = 0, touchLookStartY = 0;
+        let touchLookMoved = false;
+        let touchHoldTimer = null;
+        let touchIsMining = false;
+
+        function handlePointerUp(e) {
+            if (e.pointerId === joystickTouchId) {
+                joystickTouchId = null;
+                joystickStick.style.transform = `translate(-50%, -50%)`;
+                moveForward = moveBackward = moveLeft = moveRight = false;
+            } else if (e.pointerId === touchLookId) {
+                clearTimeout(touchHoldTimer);
+                if (!touchLookMoved && !touchIsMining) {
+                    // 短按：放置方块或交互 (相当于鼠标右键)
+                    const event = new MouseEvent('mousedown', { button: 2, bubbles: true });
+                    document.dispatchEvent(event);
+                }
+                if (touchIsMining) {
+                    // 停止挖掘
+                    const event = new MouseEvent('mouseup', { button: 0, bubbles: true });
+                    document.dispatchEvent(event);
+                    touchIsMining = false;
+                }
+                touchLookId = null;
+            }
+        }
+
+        document.addEventListener('pointerup', handlePointerUp);
+        document.addEventListener('pointercancel', handlePointerUp);
+
+        // 视角转动区域 (全屏非按钮区域)
+        document.addEventListener('pointerdown', (e) => {
+            if (!isTouchControlsEnabled || !isPlaying || !controls.isLocked) return;
+            if (e.target.closest && (e.target.closest('#touch-joystick-container') || e.target.closest('.touch-button'))) return;
+            
+            if (touchLookId === null && e.pointerId !== joystickTouchId) {
+                touchLookId = e.pointerId;
+                lastTouchX = e.clientX;
+                lastTouchY = e.clientY;
+                touchLookStartX = e.clientX;
+                touchLookStartY = e.clientY;
+                touchLookMoved = false;
+                touchIsMining = false;
+
+                // 设置长按定时器
+                touchHoldTimer = setTimeout(() => {
+                    if (!touchLookMoved) {
+                        touchIsMining = true;
+                        // 触发长按挖掘 (相当于鼠标左键按住)
+                        const event = new MouseEvent('mousedown', { button: 0, bubbles: true });
+                        document.dispatchEvent(event);
+                    }
+                }, 300); // 300ms 判定为长按
+            }
+        });
+
+        // 按钮点击逻辑 (使用 pointer 事件增强兼容性)
+        document.getElementById('touch-btn-jump').addEventListener('pointerdown', (e) => { jumpPressed = true; e.preventDefault(); });
+        document.getElementById('touch-btn-jump').addEventListener('pointerup', (e) => { jumpPressed = false; e.preventDefault(); });
+        document.getElementById('touch-btn-jump').addEventListener('pointercancel', (e) => { jumpPressed = false; e.preventDefault(); });
+        
+        document.getElementById('touch-btn-sneak').addEventListener('pointerdown', (e) => { shiftPressed = true; e.preventDefault(); });
+        document.getElementById('touch-btn-sneak').addEventListener('pointerup', (e) => { shiftPressed = false; e.preventDefault(); });
+        document.getElementById('touch-btn-sneak').addEventListener('pointercancel', (e) => { shiftPressed = false; e.preventDefault(); });
+
+        document.getElementById('touch-btn-inventory').addEventListener('pointerdown', (e) => {
+            if (isInventoryOpen) { controls.lock(); }
+            else { craftingMode = 2; isInventoryOpen = true; renderInventoryUI(); controls.unlock(); }
+            e.preventDefault();
+        });
+
+        document.getElementById('touch-btn-place').addEventListener('pointerdown', (e) => {
+            const event = new MouseEvent('mousedown', { button: 2, bubbles: true });
+            document.dispatchEvent(event);
+            e.preventDefault();
+        });
+
+        document.getElementById('touch-btn-break').addEventListener('pointerdown', (e) => {
+            const event = new MouseEvent('mousedown', { button: 0, bubbles: true });
+            document.dispatchEvent(event);
+            e.preventDefault();
+        });
+        document.getElementById('touch-btn-break').addEventListener('pointerup', (e) => {
+            const event = new MouseEvent('mouseup', { button: 0, bubbles: true });
+            document.dispatchEvent(event);
+            e.preventDefault();
+        });
+        document.getElementById('touch-btn-break').addEventListener('pointercancel', (e) => {
+            const event = new MouseEvent('mouseup', { button: 0, bubbles: true });
+            document.dispatchEvent(event);
+            e.preventDefault();
+        });
+
+        document.getElementById('touch-btn-pause').addEventListener('pointerdown', (e) => {
+            controls.unlock();
+            e.preventDefault();
+        });
+
+        const btnCloseInv = document.getElementById('btn-close-inventory');
+        if (btnCloseInv) {
+            btnCloseInv.addEventListener('pointerdown', (e) => {
+                if (isInventoryOpen) controls.lock();
+                e.preventDefault();
+            });
+        }
+
+        document.getElementById('btn-toggle-touch').addEventListener('click', () => {
+            updateTouchControls(!isTouchControlsEnabled);
+        });
+        
+        let touchLocked = false;
+        const originalLock = controls.lock;
+        controls.lock = function() {
+            if (isTouchControlsEnabled) {
+                touchLocked = true;
+                uiLayer.style.display = 'none';
+                pauseScreen.style.display = 'none';
+                inventoryUiEl.style.display = 'none';
+                document.getElementById('touch-ui').style.display = 'block';
+                document.getElementById('crosshair').style.display = 'block';
+                hotbarEl.style.display = 'flex';
+                if (gameMode !== 0) document.getElementById('status-bars').style.display = 'flex';
+                debugUiEl.style.display = 'block';
+                controls.dispatchEvent({ type: 'lock' });
+                return;
+            }
+            originalLock.call(controls);
+        };
+        const originalUnlock = controls.unlock;
+        controls.unlock = function() {
+            if (isTouchControlsEnabled) {
+                touchLocked = false;
+                document.getElementById('touch-ui').style.display = 'none';
+                controls.dispatchEvent({ type: 'unlock' });
+                return;
+            }
+            originalUnlock.call(controls);
+        };
+
+        // 劫持 isLocked 属性，使其在触屏模式下也能返回正确状态
+        Object.defineProperty(controls, 'isLocked', {
+            get: function() {
+                if (isTouchControlsEnabled) return touchLocked;
+                // 默认逻辑：检查 pointerLockElement
+                return document.pointerLockElement === document.body; 
+            },
+            configurable: true
+        });
+        
+        // 初始化一次
+        updateTouchControls(isTouchControlsEnabled);
         // ==========================================

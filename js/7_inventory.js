@@ -273,6 +273,9 @@
             if (container === 'crafting' || container === 'output' || container === 'furnace' || container === 'armor' || container === 'chest') {
                 checkCrafting();
                 if (typeof updateStatusUI === 'function') updateStatusUI();
+                if ((container === 'chest' || container === 'furnace' || container === 'output') && window.syncContainerState) {
+                    window.syncContainerState();
+                }
             }
             renderInventoryUI();
         }

@@ -794,3 +794,127 @@ body {
             box-shadow: 0 0 50px rgba(0,0,0,1);
             position: relative;
         }
+        /* --- 触屏 UI 样式 --- */
+        #touch-ui {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        #touch-joystick-container {
+            position: absolute;
+            bottom: 40px;
+            left: 40px;
+            width: 150px;
+            height: 150px;
+            pointer-events: auto;
+        }
+
+        #touch-joystick-base {
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            position: relative;
+        }
+
+        #touch-joystick-stick {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 60px;
+            height: 60px;
+            background: rgba(255, 255, 255, 0.5);
+            border: 2px solid rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        #touch-action-buttons {
+            position: absolute;
+            bottom: 40px;
+            right: 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            pointer-events: auto;
+        }
+
+        #touch-interact-buttons {
+            position: absolute;
+            bottom: 40px;
+            right: 180px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            pointer-events: auto;
+        }
+
+        #touch-pause-container {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            pointer-events: auto;
+        }
+
+        #touch-btn-pause {
+            width: 50px;
+            height: 50px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #fff;
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .touch-button {
+            width: 70px;
+            height: 70px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+            text-shadow: 2px 2px 0 #000;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            pointer-events: auto;
+        }
+
+        .touch-button:active {
+            background: rgba(255, 255, 255, 0.4);
+            transform: scale(0.95);
+        }
+
+        /* 针对手机端的小屏幕调整 */
+        @media (max-height: 500px) {
+            #touch-joystick-container {
+                width: 100px;
+                height: 100px;
+                bottom: 20px;
+                left: 20px;
+            }
+            .touch-button {
+                width: 50px;
+                height: 50px;
+                font-size: 12px;
+            }
+            #touch-action-buttons, #touch-interact-buttons {
+                bottom: 20px;
+                right: 20px;
+            }
+            #touch-interact-buttons {
+                right: 90px;
+            }
+        }

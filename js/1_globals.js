@@ -1,4 +1,29 @@
         // ==========================================
+        window.shadowsEnabled = localStorage.getItem('mc_shadows_enabled') === 'true';
+        // 材质替换黑科技：如果启用了超强光影，自动将 MeshLambertMaterial 升级为具有物理反射的 MeshStandardMaterial！
+        const OriginalMeshLambertMaterial = THREE.MeshLambertMaterial;
+        THREE.MeshLambertMaterial = function(parameters) {
+            if (window.shadowsEnabled) {
+                const isWater = parameters && (parameters.color === 0x3f76e4 || (parameters.map && parameters.map.uiIcon && parameters.map.uiIcon.includes('water')));
+                const isLava = parameters && (parameters.opacity === 0.9 && parameters.transparent && !parameters.alphaTest);
+                const standardParams = {
+                    ...parameters,
+                    roughness: isWater ? 0.1 : (isLava ? 0.05 : 0.8),
+                    metalness: isWater ? 0.9 : (isLava ? 0.9 : 0.1)
+                };
+                if (isWater) {
+                    standardParams.color = new THREE.Color(0x1a4f8f); // 更加深邃清澈的反射蓝色
+                    standardParams.opacity = 0.65;
+                }
+                const mat = new THREE.MeshStandardMaterial(standardParams);
+                mat.isMeshLambertMaterial = true; // 欺骗外部代码
+                return mat;
+            } else {
+                return new OriginalMeshLambertMaterial(parameters);
+            }
+        };
+        THREE.MeshLambertMaterial.prototype = Object.create(THREE.Material.prototype);
+        
         window.currentWorldName = '';
         window.mcSeed = parseFloat(localStorage.getItem('mc_seed'));
         if (isNaN(window.mcSeed)) { window.mcSeed = Math.random(); localStorage.setItem('mc_seed', window.mcSeed); }
@@ -47,22 +72,84 @@
             materials.water.opacity = (val === 1) ? 0.8 : 0.6;
             materials.water.needsUpdate = true;
         }
-        // 遍历所有区块，切换水的几何体以实现无缝重叠
-        if (typeof chunks !== 'undefined' && typeof typeGeometries !== 'undefined') {
-            const newGeo = (val === 1) ? typeGeometries.water_high : typeGeometries.water_low;
-            chunks.forEach(chunk => {
-                if (chunk.meshes && chunk.meshes.water) {
-                    chunk.meshes.water.geometry = newGeo;
-                }
-            });
-        }
+        // 遍历所有区块，触发水重绘 (或者只是等待下一次更新)
+        // (对于深度写入和透明度，修改 material 已经足够，会自动应用 to 所有水网格)
         const btn = document.getElementById('btn-toggle-water');
         if (btn) btn.innerText = `水面画质: ${val === 1 ? '高' : '低'}`;
     };
+    
+    window.shadowsEnabled = localStorage.getItem('mc_shadows_enabled') === 'true';
+    window.updateShadows = function(val) {
+        window.shadowsEnabled = val;
+        localStorage.setItem('mc_shadows_enabled', val ? 'true' : 'false');
+        window.shadowToggleChanged = true;
+        
+        if (typeof directionalLight !== 'undefined' && directionalLight) {
+            directionalLight.castShadow = val;
+        }
+        
+        // 遍历更新所有区块 Mesh 的阴影属性
+        if (typeof chunks !== 'undefined' && chunks) {
+            chunks.forEach(chunk => {
+                for (let type in chunk.meshes) {
+                    const mesh = chunk.meshes[type];
+                    const isWaterOrGlass = type === 'water' || type === 'glass' || type.startsWith('water');
+                    mesh.castShadow = !isWaterOrGlass && val;
+                    mesh.receiveShadow = val;
+                }
+            });
+        }
+        
+        if (typeof scene !== 'undefined' && scene) {
+            scene.traverse(node => {
+                if (node.isMesh) {
+                    const isWaterOrGlass = node.material && (node.material.opacity < 0.9 && node.material.transparent);
+                    node.castShadow = !isWaterOrGlass && val;
+                    node.receiveShadow = val;
+                }
+                if (node.material) {
+                    if (Array.isArray(node.material)) {
+                        node.material.forEach(m => m.needsUpdate = true);
+                    } else {
+                        node.material.needsUpdate = true;
+                    }
+                }
+            });
+        }
+        
+        const btn = document.getElementById('btn-toggle-shadows');
+        if (btn) btn.innerText = `超强光影: ${val ? '开' : '关'}`;
+    };
     window.currentFurnacePos = null;
+    window.isTouchControlsEnabled = localStorage.getItem('mc_touch_controls') === 'true';
+    window.updateTouchControls = function(val) {
+        window.isTouchControlsEnabled = val;
+        localStorage.setItem('mc_touch_controls', val);
+        const touchUI = document.getElementById('touch-ui');
+        if (touchUI) {
+            // 只有在开启且当前未打开菜单时显示（或者由 lock/unlock 逻辑接管）
+            if (!val) touchUI.style.display = 'none';
+            else if (typeof controls !== 'undefined' && (controls.isLocked || window.isTouchControlsEnabled)) {
+                // 如果在游戏中，根据是否开启触屏来切换
+                // 注意：真正的显示/隐藏现在由 input.js 里的 lock/unlock 劫持逻辑控制
+            }
+        }
+        const btn = document.getElementById('btn-toggle-touch');
+        if (btn) btn.innerText = `触屏控制: ${val ? '开' : '关'}`;
+        const btnCloseInv = document.getElementById('btn-close-inventory');
+        if (btnCloseInv) {
+            btnCloseInv.style.display = val ? 'block' : 'none';
+        }
+        
+        // 如果开启触屏，可能需要调整某些 UI 深度或交互
+        if (val) {
+            document.body.classList.add('touch-enabled');
+        } else {
+            document.body.classList.remove('touch-enabled');
+        }
+    };
     // ==========================================
 
-    // 极简存档系统：仅记录种子、修改的方块坐标和玩家信息，大幅减少存储占用
     window.saveToFile = async function(filename, content) {
         try {
             if (!filename) return { status: 'error', message: '文件名不能为空' };
@@ -95,8 +182,22 @@
                 meta: content.metadata
             };
 
+            // 保存到本地（备用）
             localStorage.setItem(key, JSON.stringify(optimizedData));
-            console.log(`存档成功: ${filename} (压缩后尺寸: ${Math.round(JSON.stringify(optimizedData).length / 1024)} KB)`);
+            
+            // 保存到服务器
+            try {
+                const host = window.location.hostname || 'localhost';
+                await fetch(`http://${host}:8000/api/save`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename: filename + '.json', content: optimizedData })
+                });
+                console.log(`存档已同步至服务器: ${filename}`);
+            } catch (e) {
+                console.warn("无法同步到服务器，已保存在本地", e);
+            }
+
             return { status: 'success' };
         } catch (e) {
             console.error("Save failed:", e);
@@ -107,10 +208,25 @@
 
     window.loadFromFile = async function(filename) {
         try {
-            const key = 'mc_sv3_' + filename;
-            const raw = localStorage.getItem(key);
-            if (!raw) return null;
-            const data = JSON.parse(raw);
+            let data = null;
+            // 优先从服务器读取
+            try {
+                const host = window.location.hostname || 'localhost';
+                const res = await fetch(`http://${host}:8000/api/load?filename=${filename}.json`);
+                if (res.ok) {
+                    const json = await res.json();
+                    if (json.status === 'success') data = json.content;
+                }
+            } catch (e) { }
+
+            // 服务器加载失败则读取本地
+            if (!data) {
+                const key = 'mc_sv3_' + filename;
+                const raw = localStorage.getItem(key);
+                if (raw) data = JSON.parse(raw);
+            }
+            
+            if (!data) return null;
             
             // 如果是旧版本或未压缩数据，直接返回
             if (data.v !== 3) return data;
@@ -146,18 +262,35 @@
     };
 
     window.listSaves = async function() {
-        const files = [];
+        const files = new Set();
+        try {
+            const host = window.location.hostname || 'localhost';
+            const res = await fetch(`http://${host}:8000/api/list`);
+            if (res.ok) {
+                const json = await res.json();
+                if (json.status === 'success') {
+                    json.files.forEach(f => {
+                        if (f !== 'accounts.json') files.add(f.replace('.json', ''));
+                    });
+                }
+            }
+        } catch (e) { }
+
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
             if (key.startsWith('mc_sv3_')) {
-                files.push(key.replace('mc_sv3_', ''));
+                files.add(key.replace('mc_sv3_', ''));
             }
         }
-        return files;
+        return Array.from(files);
     };
 
     window.deleteSave = async function(filename) {
         localStorage.removeItem('mc_sv3_' + filename);
+        try {
+            const host = window.location.hostname || 'localhost';
+            await fetch(`http://${host}:8000/api/delete?filename=${filename}.json`);
+        } catch (e) { }
         return { status: 'success' };
     };
 

@@ -3,18 +3,18 @@ let myPeer = null, myConnection = null, connectedClients = [];
 let isMultiplayerHost = false; let multiplayerPeers = {};
 
 function startLanServer() {
-    const customId = document.getElementById('lan-room-id').value.trim();
-    if (!customId) { alert('请输入房间号'); return; }
-    if (!window.Peer) return alert("多人组件加载失败");
+    if (!window.Peer) return alert("多人组件加载失败 (请检查网络连接)");
     
     isMultiplayerHost = true;
-    appendChat("正在创建自定义局域网房间: " + customId);
+    appendChat("正在创建局域网房间...");
     
-    myPeer = new Peer(customId);
+    // 立即锁定鼠标，锁定成功后 lock 事件会自动隐藏菜单
+    if (window.controls) window.controls.lock();
+    
+    myPeer = new Peer(); // 自动生成随机 ID
     myPeer.on('open', id => {
-        appendChat("房间创建成功！房间号: " + id);
-        document.getElementById('lan-setup-modal').style.display = 'none';
-        controls.lock(); pauseScreen.style.display = 'none';
+        appendChat("房间创建成功！房间号: " + id + " (已自动复制到剪贴板)");
+        navigator.clipboard.writeText(id).catch(() => { });
     });
     myPeer.on('connection', conn => {
         connectedClients.push(conn);
@@ -24,7 +24,9 @@ function startLanServer() {
             type: 'world_sync', 
             data: worldData, 
             seed: mcSeed,
-            mods: modifiedBlocks
+            mods: modifiedBlocks,
+            chests: window.chestInventories,
+            furnaces: window.furnaceStates
         });
         
         conn.on('data', data => { 
@@ -38,8 +40,7 @@ function startLanServer() {
         });
     });
     myPeer.on('error', err => {
-        if (err.type === 'unavailable-id') alert('房间号已存在，请尝试其他号码');
-        else appendChat("网络错误: " + err.type);
+        appendChat("网络错误: " + err.type);
     });
 }
 window.startLanServer = startLanServer;
@@ -72,6 +73,8 @@ function handleNetworkData(data, senderId) {
         mcSeed = data.seed;
         initNoise(); // 必须重新初始化噪声，否则地形会对不上
         modifiedBlocks = data.mods;
+        window.chestInventories = data.chests || {};
+        window.furnaceStates = data.furnaces || {};
         
         // 重载所有区块
         chunks.forEach(c => blockTypes.forEach(t => scene.remove(c.meshes[t])));
@@ -83,8 +86,54 @@ function handleNetworkData(data, senderId) {
         appendChat("已同步房主世界 (Seed: " + mcSeed + ")");
     } else if (data.type === 'chat') {
         appendChat(data.name + ": " + data.message);
+    } else if (data.type === 'mobs') {
+        if (currentDimension !== data.dim) return;
+        
+        // 更新本地实体
+        data.mobs.forEach(m => {
+            let localMob = entities.find(e => e.id === m.id);
+            if (!localMob) {
+                if (m.type === 'pig') spawnPig(m.pos[0], m.pos[2], m.pos[1]-2);
+                else if (m.type === 'cow') spawnCow(m.pos[0], m.pos[2], m.pos[1]-2);
+                else if (m.type === 'zombie') spawnZombie(m.pos[0], m.pos[2], m.pos[1]-2);
+                else if (m.type === 'spider') spawnSpider(m.pos[0], m.pos[2], m.pos[1]-1);
+                else if (m.type === 'blaze') spawnBlaze(m.pos[0], m.pos[2], m.pos[1]-2);
+                else if (m.type === 'enderman') spawnEnderman(m.pos[0], m.pos[2], m.pos[1]-2);
+                
+                localMob = entities[entities.length - 1];
+                if (localMob) localMob.id = m.id;
+            }
+            if (localMob) {
+                localMob.mesh.position.set(m.pos[0], m.pos[1], m.pos[2]);
+                if (localMob.mesh.rotation) localMob.mesh.rotation.y = m.rot;
+                localMob.hp = m.hp;
+            }
+        });
+        
+        // 移除服务器已不存在的实体
+        for (let i = entities.length - 1; i >= 0; i--) {
+            const e = entities[i];
+            if (['pig', 'cow', 'zombie', 'spider', 'blaze', 'enderman'].includes(e.type)) {
+                if (!data.mobs.find(m => m.id === e.id)) {
+                    scene.remove(e.mesh);
+                    entities.splice(i, 1);
+                }
+            }
+        }
+    } else if (data.type === 'containers') {
+        window.chestInventories = data.chests;
+        window.furnaceStates = data.furnaces;
+        if (window.renderInventoryUI) window.renderInventoryUI();
     }
 }
+
+window.syncContainerState = function() {
+    if (myPeer) {
+        const netData = { type: 'containers', chests: window.chestInventories, furnaces: window.furnaceStates };
+        if (isMultiplayerHost) connectedClients.forEach(c => c.send(netData));
+        else if (myConnection) myConnection.send(netData);
+    }
+};
 
 function removeNetworkPlayer(id) {
     if (multiplayerPeers[id]) {
@@ -140,8 +189,42 @@ document.getElementById('btn-modal-quit').addEventListener('click', () => {
 
 document.getElementById('btn-options-title').addEventListener('click', () => { titleScreen.style.display = 'none'; document.getElementById('options-screen').style.display = 'flex'; document.getElementById('player-name-input').value = localStorage.getItem('mc_playerName') || 'Player'; });
 document.getElementById('btn-options-pause').addEventListener('click', () => { pauseScreen.style.display = 'none'; document.getElementById('options-screen').style.display = 'flex'; document.getElementById('player-name-input').value = localStorage.getItem('mc_playerName') || 'Player'; });
-document.getElementById('btn-save-options').addEventListener('click', () => { localStorage.setItem('mc_playerName', document.getElementById('player-name-input').value.trim() || 'Player'); document.getElementById('options-screen').style.display = 'none'; if (isPlaying) pauseScreen.style.display = 'flex'; else titleScreen.style.display = 'flex'; });
-document.getElementById('skin-upload').addEventListener('change', (e) => { const file = e.target.files[0]; if (file) { const reader = new FileReader(); reader.onload = (ev) => { localStorage.setItem('mc_playerSkin', ev.target.result); renderInventoryUI(); }; reader.readAsDataURL(file); } });
+
+async function savePlayerSettings() {
+    try {
+        const host = window.location.hostname || 'localhost';
+        const settings = {
+            playerName: localStorage.getItem('mc_playerName') || 'Player',
+            playerSkin: localStorage.getItem('mc_playerSkin') || ''
+        };
+        await fetch(`http://${host}:8000/api/settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settings)
+        });
+    } catch(e) {}
+}
+
+document.getElementById('btn-save-options').addEventListener('click', () => { 
+    localStorage.setItem('mc_playerName', document.getElementById('player-name-input').value.trim() || 'Player'); 
+    savePlayerSettings();
+    document.getElementById('options-screen').style.display = 'none'; 
+    if (isPlaying) pauseScreen.style.display = 'flex'; 
+    else titleScreen.style.display = 'flex'; 
+});
+
+document.getElementById('skin-upload').addEventListener('change', (e) => { 
+    const file = e.target.files[0]; 
+    if (file) { 
+        const reader = new FileReader(); 
+        reader.onload = (ev) => { 
+            localStorage.setItem('mc_playerSkin', ev.target.result); 
+            savePlayerSettings();
+            if (typeof renderInventoryUI === 'function') renderInventoryUI(); 
+        }; 
+        reader.readAsDataURL(file); 
+    } 
+});
 
 document.getElementById('btn-multiplayer').addEventListener('click', () => { titleScreen.style.display = 'none'; document.getElementById('multiplayer-screen').style.display = 'flex'; });
 document.getElementById('btn-multiplayer-back').addEventListener('click', () => { document.getElementById('multiplayer-screen').style.display = 'none'; titleScreen.style.display = 'flex'; });
@@ -160,7 +243,7 @@ document.getElementById('btn-host-game').addEventListener('click', () => {
     myPeer.on('connection', conn => {
         connectedClients.push(conn);
         const worldData = Array.from(worldBlocks.entries());
-        conn.send({ type: 'world_sync', data: worldData, seed: mcSeed, mods: modifiedBlocks });
+        conn.send({ type: 'world_sync', data: worldData, seed: mcSeed, mods: modifiedBlocks, chests: window.chestInventories, furnaces: window.furnaceStates });
         conn.on('data', data => { handleNetworkData(data, conn.peer); connectedClients.forEach(c => { if (c.peer !== conn.peer) c.send(data); }); });
         conn.on('close', () => { removeNetworkPlayer(conn.peer); connectedClients = connectedClients.filter(c => c !== conn); });
     });
@@ -189,4 +272,20 @@ document.getElementById('btn-join-game').addEventListener('click', () => {
 });
 
 uiLayer.style.display = 'flex'; titleScreen.style.display = 'flex'; worldSelectScreen.style.display = 'none'; createWorldScreen.style.display = 'none'; pauseScreen.style.display = 'none';
+
+// 在游戏启动时尝试从服务器读取玩家设置
+(async function initPlayerSettings() {
+    try {
+        const host = window.location.hostname || 'localhost';
+        const res = await fetch(`http://${host}:8000/api/settings`);
+        if (res.ok) {
+            const data = await res.json();
+            if (data.status === 'success' && data.content) {
+                if (data.content.playerName) localStorage.setItem('mc_playerName', data.content.playerName);
+                if (data.content.playerSkin) localStorage.setItem('mc_playerSkin', data.content.playerSkin);
+            }
+        }
+    } catch(e) {}
+})();
+
 // ==========================================

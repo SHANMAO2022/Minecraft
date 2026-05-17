@@ -87,7 +87,7 @@ start /min "MinecraftServer" "%USE_PYTHON%" server.py
 
 echo [3/3] 正在进入游戏...
 timeout /t 2 >nul
-start msedge -inprivate "http://localhost:8000"
+start chrome -inprivate "http://localhost:8000"
 
 echo --------------------------------------------------------
 echo [完成] 游戏已启动！

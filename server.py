@@ -1,6 +1,8 @@
 import http.server
 import json
 import os
+import urllib.parse
+import base64
 
 class SaveHandler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
@@ -21,6 +23,28 @@ class SaveHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(json.dumps({'status': 'success'}).encode())
+        elif self.path == '/api/settings':
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data)
+            
+            os.makedirs('saves', exist_ok=True)
+            
+            player_skin = data.get('playerSkin', '')
+            if player_skin and player_skin.startswith('data:image/png;base64,'):
+                skin_data = base64.b64decode(player_skin.split(',')[1])
+                skin_path = os.path.join('saves', 'skin.png')
+                with open(skin_path, 'wb') as f:
+                    f.write(skin_data)
+                
+            with open(os.path.join('saves', 'player_settings.json'), 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=4)
+                
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({'status': 'success'}).encode())
         else:
             self.send_error(404)
 
@@ -32,7 +56,8 @@ class SaveHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.startswith('/api/load'):
-            filename = self.path.split('filename=')[-1] if 'filename=' in self.path else 'world.json'
+            raw_filename = self.path.split('filename=')[-1] if 'filename=' in self.path else 'world.json'
+            filename = urllib.parse.unquote(raw_filename)
             filepath = os.path.join('saves', filename)
             
             if os.path.exists(filepath):
@@ -48,6 +73,21 @@ class SaveHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(json.dumps({'status': 'error', 'message': 'File not found'}).encode())
+        elif self.path == '/api/settings':
+            filepath = os.path.join('saves', 'player_settings.json')
+            if os.path.exists(filepath):
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    content = json.load(f)
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'success', 'content': content}).encode())
+            else:
+                self.send_response(404)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': 'No settings'}).encode())
         elif self.path == '/api/list':
             os.makedirs('saves', exist_ok=True)
             files = [f for f in os.listdir('saves') if f.endswith('.json')]
@@ -57,7 +97,8 @@ class SaveHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({'status': 'success', 'files': files}).encode())
         elif self.path.startswith('/api/delete'):
-            filename = self.path.split('filename=')[-1] if 'filename=' in self.path else 'world.json'
+            raw_filename = self.path.split('filename=')[-1] if 'filename=' in self.path else 'world.json'
+            filename = urllib.parse.unquote(raw_filename)
             filepath = os.path.join('saves', filename)
             if os.path.exists(filepath):
                 os.remove(filepath)

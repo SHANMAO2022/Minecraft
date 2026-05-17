@@ -78,16 +78,20 @@
                     waterFaces.forEach(f => {
                         const ft = `water_${f}`;
                         meshes[ft] = new THREE.InstancedMesh(typeGeometries[ft], materials.water, maxBlocksPerType.water);
-                        meshes[ft].frustumCulled = false; meshes[ft].renderOrder = 10; counts[ft] = 0;
+                        meshes[ft].renderOrder = 10; counts[ft] = 0;
+                        meshes[ft].castShadow = false;
+                        meshes[ft].receiveShadow = window.shadowsEnabled;
                         scene.add(meshes[ft]);
                     });
                     continue;
                 }
                 const geo = typeGeometries[type] || blockGeometry;
                 meshes[type] = new THREE.InstancedMesh(geo, materials[type], maxBlocksPerType[type]); 
-                meshes[type].frustumCulled = false; 
                 if (type === 'glass' || type === 'lava') meshes[type].renderOrder = 10;
                 counts[type] = 0; 
+                const isWaterOrGlass = type === 'water' || type === 'glass' || type.startsWith('water');
+                meshes[type].castShadow = !isWaterOrGlass && window.shadowsEnabled;
+                meshes[type].receiveShadow = window.shadowsEnabled;
                 scene.add(meshes[type]);
             }
             
@@ -179,8 +183,22 @@
                                     for (let ty = 1; ty <= trunkHeight; ty++) blocks.set(`${wx},${surfaceY + ty},${wz}`, 'log');
                                     for (let lx = -2; lx <= 2; lx++) for (let lz = -2; lz <= 2; lz++) for (let ly = trunkHeight - 2; ly <= trunkHeight + 1; ly++) {
                                         if (Math.abs(lx) + Math.abs(lz) + Math.abs(ly-trunkHeight) <= 3) {
-                                            const lk = `${wx+lx},${surfaceY+ly},${wz+lz}`;
-                                            if (!blocks.has(lk)) blocks.set(lk, leafType);
+                                            const lX = wx+lx, lY = surfaceY+ly, lZ = wz+lz;
+                                            const lk = `${lX},${lY},${lZ}`;
+                                            const targetCx = Math.floor(lX/chunkSize);
+                                            const targetCz = Math.floor(lZ/chunkSize);
+                                            if (targetCx === cx && targetCz === cz) {
+                                                if (!blocks.has(lk)) blocks.set(lk, leafType);
+                                            } else {
+                                                if (!modifiedBlocks[currentDimension][lk]) {
+                                                    modifiedBlocks[currentDimension][lk] = leafType;
+                                                    const nChunk = chunks.get(`${targetCx},${targetCz}`);
+                                                    if (nChunk && !nChunk.blocks.has(lk)) {
+                                                        nChunk.blocks.set(lk, leafType);
+                                                        if (typeof rebuildChunkMesh === 'function') rebuildChunkMesh(nChunk);
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -305,9 +323,15 @@
                 const pk = `${x},${y},${z}`;
                 if (blocks.has(pk)) return blocks.get(pk);
                 
-                // 2. 检查全局已修改或已加载的区块
-                const globalT = getBlock(x, y, z);
-                if (globalT !== null && globalT !== undefined) return globalT;
+                // 2. 检查全局已修改或已加载的区块 (快速通道)
+                const tCx = Math.floor(x / chunkSize);
+                const tCz = Math.floor(z / chunkSize);
+                if (tCx === cx && tCz === cz) return null; // 同一区块但没找到，肯定是空气
+                const tChunk = chunks.get(`${tCx},${tCz}`);
+                if (tChunk) {
+                    if (tChunk.blocks.has(pk)) return tChunk.blocks.get(pk);
+                    return null; // 邻居区块已加载但没有这个方块，说明是空气
+                }
                 
                 // 3. 如果邻居区块未加载，通过噪声函数预测地形
                 if (currentDimension === 'overworld') {
@@ -318,26 +342,81 @@
                 return null; // 预测为空气
             };
 
-            const isAir = (t) => t === null || t === undefined;
+            const isTransparent = (t) => {
+                if (t === null || t === undefined) return true;
+                const tr = ['glass', 'leaves', 'swamp_leaves', 'tall_grass', 'torch', 'end_rod', 'nether_portal', 'end_portal', 'return_portal', 'door_top', 'door_bottom', 'door_top_open', 'door_bottom_open', 'cactus', 'lily_pad', 'spawner'];
+                return tr.includes(t);
+            };
+            const isOpaque = (t) => {
+                if (t === null || t === undefined) return false;
+                const nonOpaque = ['glass', 'leaves', 'swamp_leaves', 'tall_grass', 'torch', 'end_rod', 'nether_portal', 'end_portal', 'end_portal_frame_empty', 'end_portal_frame_filled', 'return_portal', 'door_top', 'door_bottom', 'door_top_open', 'door_bottom_open', 'cactus', 'lily_pad', 'spawner', 'water', 'lava', 'bed', 'bed_head', 'bed_foot', 'chest', 'ice'];
+                return !nonOpaque.includes(t);
+            };
             const isWater = (t) => t === 'water';
+            const getWaterH = (nx, ny, nz, t) => {
+                if (t !== 'water') return 0;
+                if (getBlockProcedural(nx, ny + 1, nz) === 'water') return 1.0;
+                const nKey = `${nx},${ny},${nz}`;
+                let ndist = window.waterDistances.has(nKey) ? window.waterDistances.get(nKey) : 0;
+                return Math.max(0.15, 1.0 - (ndist * 0.1));
+            };
 
             blocks.forEach((type, posKey) => {
                 const [bx, by, bz] = posKey.split(',').map(Number);
                 if (type === 'water') {
-                    dummy.position.set(bx + 0.5, by + 0.5, bz + 0.5); dummy.updateMatrix();
+                    const topT = getBlockProcedural(bx, by + 1, bz);
+                    let h = 1.0;
+                    if (topT !== 'water') {
+                        let dist = window.waterDistances.has(posKey) ? window.waterDistances.get(posKey) : 0;
+                        h = Math.max(0.15, 1.0 - (dist * 0.1));
+                    }
                     
-                    // 顶面：上方不是水就渲染
-                    if (!isWater(getBlockProcedural(bx, by + 1, bz))) meshes.water_top.setMatrixAt(counts.water_top++, dummy.matrix);
+                    dummy.position.set(bx + 0.5, by + h / 2, bz + 0.5);
+                    dummy.scale.set(1, h, 1);
+                    dummy.updateMatrix();
                     
-                    // 侧面和底面：只有邻居绝对是空气才渲染
-                    if (isAir(getBlockProcedural(bx, by - 1, bz))) meshes.water_bottom.setMatrixAt(counts.water_bottom++, dummy.matrix);
-                    if (isAir(getBlockProcedural(bx, by, bz - 1))) meshes.water_north.setMatrixAt(counts.water_north++, dummy.matrix);
-                    if (isAir(getBlockProcedural(bx, by, bz + 1))) meshes.water_south.setMatrixAt(counts.water_south++, dummy.matrix);
-                    if (isAir(getBlockProcedural(bx + 1, by, bz))) meshes.water_east.setMatrixAt(counts.water_east++, dummy.matrix);
-                    if (isAir(getBlockProcedural(bx - 1, by, bz))) meshes.water_west.setMatrixAt(counts.water_west++, dummy.matrix);
+                    if (!isWater(topT)) meshes.water_top.setMatrixAt(counts.water_top++, dummy.matrix);
+                    
+                    const bottomT = getBlockProcedural(bx, by - 1, bz);
+                    if (isTransparent(bottomT)) meshes.water_bottom.setMatrixAt(counts.water_bottom++, dummy.matrix);
+
+                    const sides = [
+                        [0, 0, -1, 'water_north'],
+                        [0, 0, 1, 'water_south'],
+                        [1, 0, 0, 'water_east'],
+                        [-1, 0, 0, 'water_west']
+                    ];
+                    for (let [dx, dy, dz, faceName] of sides) {
+                        const nx = bx + dx, ny = by + dy, nz = bz + dz;
+                        const nT = getBlockProcedural(nx, ny, nz);
+                        if (isTransparent(nT)) {
+                            meshes[faceName].setMatrixAt(counts[faceName]++, dummy.matrix);
+                        } else if (nT === 'water') {
+                            const nH = getWaterH(nx, ny, nz, nT);
+                            if (h > nH + 0.01) {
+                                meshes[faceName].setMatrixAt(counts[faceName]++, dummy.matrix);
+                            }
+                        }
+                    }
+                    dummy.scale.set(1, 1, 1); // reset
                 } else {
-                    dummy.position.set(bx + 0.5, by + 0.5, bz + 0.5); dummy.updateMatrix();
-                    meshes[type].setMatrixAt(counts[type]++, dummy.matrix);
+                    let isVisible = true;
+                    if (isOpaque(type)) {
+                        const top = getBlockProcedural(bx, by + 1, bz);
+                        const bottom = getBlockProcedural(bx, by - 1, bz);
+                        const north = getBlockProcedural(bx, by, bz - 1);
+                        const south = getBlockProcedural(bx, by, bz + 1);
+                        const east = getBlockProcedural(bx + 1, by, bz);
+                        const west = getBlockProcedural(bx - 1, by, bz);
+                        if (isOpaque(top) && isOpaque(bottom) && isOpaque(north) && isOpaque(south) && isOpaque(east) && isOpaque(west)) {
+                            isVisible = false;
+                        }
+                    }
+
+                    if (isVisible) {
+                        dummy.position.set(bx + 0.5, by + 0.5, bz + 0.5); dummy.updateMatrix();
+                        meshes[type].setMatrixAt(counts[type]++, dummy.matrix);
+                    }
                     const nonSolid = ['tall_grass', 'nether_portal', 'water', 'lava', 'end_rod', 'torch', 'door_top_open', 'door_bottom_open'];
                     if (!nonSolid.includes(type)) worldBlocks.add(posKey);
                 }
@@ -349,6 +428,13 @@
                 if (counts[t] > 0) meshes[t].computeBoundingSphere();
             }
             chunks.set(key, { meshes, blocks, cx, cz });
+
+            // Rebuild loaded neighbor chunks to update occlusion culling at chunk boundaries
+            const neighbors = [
+                chunks.get(`${cx-1},${cz}`), chunks.get(`${cx+1},${cz}`),
+                chunks.get(`${cx},${cz-1}`), chunks.get(`${cx},${cz+1}`)
+            ];
+            neighbors.forEach(n => { if (n) window.meshRebuildQueue.add(n); });
         }
 
         function rebuildChunkMesh(chunk) {
@@ -358,8 +444,16 @@
             const getBlockProcedural = (x, y, z) => {
                 const pk = `${x},${y},${z}`;
                 if (chunk.blocks.has(pk)) return chunk.blocks.get(pk);
-                const globalT = getBlock(x, y, z);
-                if (globalT !== null && globalT !== undefined) return globalT;
+                
+                const tCx = Math.floor(x / chunkSize);
+                const tCz = Math.floor(z / chunkSize);
+                if (tCx === chunk.cx && tCz === chunk.cz) return null; // 同区块无方块即空气
+                const tChunk = chunks.get(`${tCx},${tCz}`);
+                if (tChunk) {
+                    if (tChunk.blocks.has(pk)) return tChunk.blocks.get(pk);
+                    return null; // 邻居区块已加载但没方块，空气
+                }
+                
                 if (currentDimension === 'overworld') {
                     const sY = Math.floor(noise2D(x * 0.04, z * 0.04) * 5);
                     if (y <= sY) return 'stone';
@@ -367,24 +461,134 @@
                 }
                 return null;
             };
-            const isAir = (t) => t === null || t === undefined;
+            const isTransparent = (t) => {
+                if (t === null || t === undefined) return true;
+                const tr = ['glass', 'leaves', 'swamp_leaves', 'tall_grass', 'torch', 'end_rod', 'nether_portal', 'end_portal', 'return_portal', 'door_top', 'door_bottom', 'door_top_open', 'door_bottom_open', 'cactus', 'lily_pad', 'spawner'];
+                return tr.includes(t);
+            };
+            const isOpaque = (t) => {
+                if (t === null || t === undefined) return false;
+                const nonOpaque = ['glass', 'leaves', 'swamp_leaves', 'tall_grass', 'torch', 'end_rod', 'nether_portal', 'end_portal', 'end_portal_frame_empty', 'end_portal_frame_filled', 'return_portal', 'door_top', 'door_bottom', 'door_top_open', 'door_bottom_open', 'cactus', 'lily_pad', 'spawner', 'water', 'lava', 'bed', 'bed_head', 'bed_foot', 'chest', 'ice'];
+                return !nonOpaque.includes(t);
+            };
             const isWater = (t) => t === 'water';
+            const getWaterH = (nx, ny, nz, t) => {
+                if (t !== 'water') return 0;
+                if (getBlockProcedural(nx, ny + 1, nz) === 'water') return 1.0;
+                const nKey = `${nx},${ny},${nz}`;
+                let ndist = window.waterDistances.has(nKey) ? window.waterDistances.get(nKey) : 0;
+                return Math.max(0.15, 1.0 - (ndist * 0.1));
+            };
 
             for (const [posKey, type] of chunk.blocks.entries()) { 
                 const [bx, by, bz] = posKey.split(',').map(Number); 
-                dummy.position.set(bx + 0.5, by + 0.5, bz + 0.5); dummy.updateMatrix();
                 if (type === 'water') {
-                    if (!isWater(getBlockProcedural(bx, by + 1, bz))) chunk.meshes.water_top.setMatrixAt(counts.water_top++, dummy.matrix);
-                    if (isAir(getBlockProcedural(bx, by - 1, bz))) chunk.meshes.water_bottom.setMatrixAt(counts.water_bottom++, dummy.matrix);
-                    if (isAir(getBlockProcedural(bx, by, bz - 1))) chunk.meshes.water_north.setMatrixAt(counts.water_north++, dummy.matrix);
-                    if (isAir(getBlockProcedural(bx, by, bz + 1))) chunk.meshes.water_south.setMatrixAt(counts.water_south++, dummy.matrix);
-                    if (isAir(getBlockProcedural(bx + 1, by, bz))) chunk.meshes.water_east.setMatrixAt(counts.water_east++, dummy.matrix);
-                    if (isAir(getBlockProcedural(bx - 1, by, bz))) chunk.meshes.water_west.setMatrixAt(counts.water_west++, dummy.matrix);
+                    const topT = getBlockProcedural(bx, by + 1, bz);
+                    let h = 1.0;
+                    if (topT !== 'water') {
+                        let dist = window.waterDistances.has(posKey) ? window.waterDistances.get(posKey) : 0;
+                        h = Math.max(0.15, 1.0 - (dist * 0.1));
+                    }
+                    
+                    dummy.position.set(bx + 0.5, by + h / 2, bz + 0.5);
+                    dummy.scale.set(1, h, 1);
+                    dummy.updateMatrix();
+                    
+                    if (!isWater(topT)) chunk.meshes.water_top.setMatrixAt(counts.water_top++, dummy.matrix);
+                    
+                    const bottomT = getBlockProcedural(bx, by - 1, bz);
+                    if (isTransparent(bottomT)) chunk.meshes.water_bottom.setMatrixAt(counts.water_bottom++, dummy.matrix);
+
+                    const sides = [
+                        [0, 0, -1, 'water_north'],
+                        [0, 0, 1, 'water_south'],
+                        [1, 0, 0, 'water_east'],
+                        [-1, 0, 0, 'water_west']
+                    ];
+                    for (let [dx, dy, dz, faceName] of sides) {
+                        const nx = bx + dx, ny = by + dy, nz = bz + dz;
+                        const nT = getBlockProcedural(nx, ny, nz);
+                        if (isTransparent(nT)) {
+                            chunk.meshes[faceName].setMatrixAt(counts[faceName]++, dummy.matrix);
+                        } else if (nT === 'water') {
+                            const nH = getWaterH(nx, ny, nz, nT);
+                            if (h > nH + 0.01) {
+                                chunk.meshes[faceName].setMatrixAt(counts[faceName]++, dummy.matrix);
+                            }
+                        }
+                    }
+                    dummy.scale.set(1, 1, 1); // reset
                 } else {
-                    chunk.meshes[type].setMatrixAt(counts[type]++, dummy.matrix);
+                    let isVisible = true;
+                    if (isOpaque(type)) {
+                        const top = getBlockProcedural(bx, by + 1, bz);
+                        const bottom = getBlockProcedural(bx, by - 1, bz);
+                        const north = getBlockProcedural(bx, by, bz - 1);
+                        const south = getBlockProcedural(bx, by, bz + 1);
+                        const east = getBlockProcedural(bx + 1, by, bz);
+                        const west = getBlockProcedural(bx - 1, by, bz);
+                        if (isOpaque(top) && isOpaque(bottom) && isOpaque(north) && isOpaque(south) && isOpaque(east) && isOpaque(west)) {
+                            isVisible = false;
+                        }
+                    }
+
+                    if (isVisible) {
+                        dummy.position.set(bx + 0.5, by + 0.5, bz + 0.5); dummy.updateMatrix();
+                        chunk.meshes[type].setMatrixAt(counts[type]++, dummy.matrix);
+                    }
                 }
             }
+            // 扫描区块是否有火把
+            let chunkHasTorch = false;
+            for (const [posKey, type] of chunk.blocks.entries()) {
+                if (type === 'torch') {
+                    chunkHasTorch = true;
+                    break;
+                }
+            }
+
+            // 初始化火把区域的超亮材质（使用贴图自发光，百分之百保留纹理细节，杜绝泛白闪光弹效果）
+            if (chunkHasTorch && !window.torchMaterials) {
+                window.torchMaterials = {};
+                for (let type in materials) {
+                    const mat = materials[type];
+                    if (Array.isArray(mat)) {
+                        window.torchMaterials[type] = mat.map(m => {
+                            const cloned = m.clone();
+                            const baseColor = cloned.color ? cloned.color.clone() : new THREE.Color(0xffffff);
+                            if (cloned.map) {
+                                cloned.emissiveMap = cloned.map;
+                                cloned.emissive = baseColor.multiplyScalar(0.53); // 核心修复：乘以材质本身的基色，确保草、水等带有调色系数的方块不丢失色彩（变黑白）！
+                                cloned.emissiveIntensity = 1.0;
+                            } else if (cloned.emissive) {
+                                cloned.emissive = baseColor.multiplyScalar(0.5); 
+                                cloned.emissiveIntensity = 1.0;
+                            }
+                            return cloned;
+                        });
+                    } else if (mat) {
+                        const cloned = mat.clone();
+                        const baseColor = cloned.color ? cloned.color.clone() : new THREE.Color(0xffffff);
+                        if (cloned.map) {
+                            cloned.emissiveMap = cloned.map;
+                            cloned.emissive = baseColor.multiplyScalar(0.53);
+                            cloned.emissiveIntensity = 1.0;
+                        } else if (cloned.emissive) {
+                            cloned.emissive = baseColor.multiplyScalar(0.5);
+                            cloned.emissiveIntensity = 1.0;
+                        }
+                        window.torchMaterials[type] = cloned;
+                    }
+                }
+            }
+
             for (const t in chunk.meshes) {
+                const baseType = t.startsWith('water_') ? 'water' : t;
+                const matSrc = chunkHasTorch ? window.torchMaterials : materials;
+                if (matSrc && matSrc[baseType]) {
+                    chunk.meshes[t].material = matSrc[baseType];
+                }
+                
                 chunk.meshes[t].count = counts[t];
                 chunk.meshes[t].instanceMatrix.needsUpdate = true;
                 if (counts[t] > 0) chunk.meshes[t].computeBoundingSphere();
@@ -393,13 +597,52 @@
 
         function unloadChunk(key) { const chunk = chunks.get(key); if (!chunk) return; for (const type in chunk.meshes) { scene.remove(chunk.meshes[type]); chunk.meshes[type].dispose(); } for (const posKey of chunk.blocks.keys()) worldBlocks.delete(posKey); chunks.delete(key); }
 
+        let chunkGenQueue = [];
+        let expectedChunksSet = new Set();
+        window.meshRebuildQueue = new Set();
+
         function updateChunks() {
             const camPos = camera.position; const cx = Math.floor(camPos.x / chunkSize); const cz = Math.floor(camPos.z / chunkSize);
-            if (cx === lastChunkX && cz === lastChunkZ) return;
-            lastChunkX = cx; lastChunkZ = cz; const expectedChunks = new Set();
-            const viewDistance = 3;
-            for (let dx = -viewDistance; dx <= viewDistance; dx++) { for (let dz = -viewDistance; dz <= viewDistance; dz++) { const targetCx = cx + dx; const targetCz = cz + dz; const key = `${targetCx},${targetCz}`; expectedChunks.add(key); generateChunk(targetCx, targetCz); } }
-            for (const key of chunks.keys()) { if (!expectedChunks.has(key)) unloadChunk(key); }
+            if (cx !== lastChunkX || cz !== lastChunkZ) {
+                lastChunkX = cx; lastChunkZ = cz; 
+                expectedChunksSet.clear();
+                const viewDistance = 3;
+                for (let dx = -viewDistance; dx <= viewDistance; dx++) { 
+                    for (let dz = -viewDistance; dz <= viewDistance; dz++) { 
+                        const targetCx = cx + dx; const targetCz = cz + dz; 
+                        const key = `${targetCx},${targetCz}`; 
+                        expectedChunksSet.add(key); 
+                        if (!chunks.has(key) && !chunkGenQueue.some(q => q.key === key)) {
+                            chunkGenQueue.push({cx: targetCx, cz: targetCz, key: key, distSq: dx*dx + dz*dz});
+                        }
+                    } 
+                }
+                
+                chunkGenQueue.sort((a, b) => a.distSq - b.distSq);
+                
+                for (const key of chunks.keys()) { 
+                    if (!expectedChunksSet.has(key)) unloadChunk(key); 
+                }
+                chunkGenQueue = chunkGenQueue.filter(q => expectedChunksSet.has(q.key));
+            }
+            
+            if (chunkGenQueue.length > 0) {
+                const startTime = performance.now();
+                while (chunkGenQueue.length > 0) {
+                    const q = chunkGenQueue.shift();
+                    if (!chunks.has(q.key)) {
+                        generateChunk(q.cx, q.cz);
+                    }
+                    if (performance.now() - startTime > 8) break; // 限制每帧最多生成 8ms，避免卡顿
+                }
+            } else if (window.meshRebuildQueue.size > 0) {
+                const startTime = performance.now();
+                for (let n of window.meshRebuildQueue) {
+                    window.meshRebuildQueue.delete(n);
+                    rebuildChunkMesh(n);
+                    if (performance.now() - startTime > 8) break;
+                }
+            }
         }
 
         function generateReturnPortal() {
@@ -426,6 +669,7 @@
         const highlightBox = new THREE.LineSegments(new THREE.EdgesGeometry(highlightGeo), highlightMat); highlightBox.visible = false; scene.add(highlightBox);
         const miningOverlay = new THREE.Mesh(new THREE.BoxGeometry(1.01, 1.01, 1.01), destroyStages[0]); miningOverlay.visible = false; scene.add(miningOverlay);
         const controls = new PointerLockControls(camera, document.body);
+        window.controls = controls;
         const inventoryUiEl = document.getElementById('inventory-ui'); const debugUiEl = document.getElementById('debug-ui'); const chatContainer = document.getElementById('chat-container'); const chatInput = document.getElementById('chat-input');
         const uiLayer = document.getElementById('ui-layer'); const titleScreen = document.getElementById('title-screen'); const worldSelectScreen = document.getElementById('world-select-screen'); const createWorldScreen = document.getElementById('create-world-screen'); const pauseScreen = document.getElementById('pause-screen');
 

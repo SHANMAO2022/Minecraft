@@ -1,0 +1,30 @@
+{
+  "name": "minecraft-split-version",
+  "version": "1.0.0",
+  "description": "Minecraft Split Version Desktop App",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "keywords": [],
+  "author": "SHANMAO2022",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.shanmao2022.minecraft",
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    },
+    "directories": {
+      "output": "dist"
+    }
+  }
+}

@@ -23,17 +23,18 @@
                 }
                 if (gameStartTime < 3.0) gameStartTime += delta;
 
-                if (myPeer && performance.now() - lastSyncTime > 100) {
-                    lastSyncTime = performance.now();
+                if (typeof myPeer !== 'undefined' && myPeer && performance.now() - (window.lastSyncTime || 0) > 100) {
+                    window.lastSyncTime = performance.now();
                     const netData = {
-                        type: 'pos', id: myPeer.id,
+                        type: 'pos', id: myPeer.id, name: localStorage.getItem('mc_playerName') || 'Player',
+                        skin: localStorage.getItem('mc_playerSkin') || '',
                         pos: [camera.position.x, camera.position.y - 1.55, camera.position.z],
                         rot: [camera.rotation.y, camera.rotation.x],
                         anim: { walk: moveForward || moveBackward || moveLeft || moveRight, punch: actionTimer > 0 },
                         dim: currentDimension
                     };
-                    if (isMultiplayerHost) connectedClients.forEach(c => c.send(netData));
-                    else if (myConnection) myConnection.send(netData);
+                    if (typeof isMultiplayerHost !== 'undefined' && isMultiplayerHost && typeof connectedClients !== 'undefined') connectedClients.forEach(c => c.send(netData));
+                    else if (typeof myConnection !== 'undefined' && myConnection) myConnection.send(netData);
                 }
 
                 const maxEntityDistSq = 4096; // 64 * 64
@@ -48,7 +49,26 @@
                     if (e.update(delta, worldTime, sunHeight, isNight)) { scene.remove(e.mesh); if (e.beam) scene.remove(e.beam); entities.splice(i, 1); } 
                 }
                 for (let i = particles.length - 1; i >= 0; i--) { const p = particles[i]; p.life -= delta; p.mesh.position.addScaledVector(p.vel, delta); p.mesh.scale.setScalar(p.life); if (p.life <= 0) { scene.remove(p.mesh); particles.splice(i, 1); } }
-                handleMobSpawning(delta, isNight);
+                if (typeof myConnection === 'undefined' || !myConnection) {
+                    handleMobSpawning(delta, isNight);
+                }
+
+                // 同步生物位置给客户端
+                if (typeof isMultiplayerHost !== 'undefined' && isMultiplayerHost && typeof myPeer !== 'undefined' && myPeer && performance.now() - (window.lastMobSyncTime || 0) > 100) {
+                    window.lastMobSyncTime = performance.now();
+                    const mobData = [];
+                    entities.forEach(e => {
+                        if (['pig', 'cow', 'zombie', 'spider', 'blaze', 'enderman'].includes(e.type)) {
+                            if (!e.id) e.id = Math.random().toString(36).substring(2, 10);
+                            mobData.push({
+                                id: e.id, type: e.type, hp: e.hp,
+                                pos: [e.mesh.position.x, e.mesh.position.y, e.mesh.position.z],
+                                rot: e.mesh.rotation ? e.mesh.rotation.y : 0
+                            });
+                        }
+                    });
+                    if (typeof connectedClients !== 'undefined') connectedClients.forEach(c => c.send({ type: 'mobs', dim: currentDimension, mobs: mobData }));
+                }
 
                 // 熔炉逻辑
                 for (const pos in furnaceStates) {
@@ -108,7 +128,11 @@
                     document.getElementById('biome-display').innerText = `群系: ${b.name}`;
                 }
             }
-            directionalLight.position.set(Math.cos(theta) * 100, Math.sin(theta) * 100, Math.sin(theta) * 30);
+            directionalLight.position.set(camera.position.x + Math.cos(theta) * 100, camera.position.y + Math.sin(theta) * 100, camera.position.z + Math.sin(theta) * 30);
+            if (directionalLight.target) {
+                directionalLight.target.position.copy(camera.position);
+                directionalLight.target.updateMatrixWorld();
+            }
             let isPlayerInWater = false; let isPlayerInLava = false;
             if (controls.isLocked === true) { const curBx = Math.floor(camera.position.x); const curBy = Math.floor(camera.position.y - 1); const curByEye = Math.floor(camera.position.y); const curBz = Math.floor(camera.position.z); const bFeet = getBlock(curBx, curBy, curBz); const bHead = getBlock(curBx, curByEye, curBz); if (bFeet === 'water' || bHead === 'water') isPlayerInWater = true; if (bFeet === 'lava' || bHead === 'lava') isPlayerInLava = true; if (bFeet === 'magma' && !isFlying && gameMode === 1 && playerInvulnTimer <= 0) { takeDamage(1); } }
             if (isPlayerInWater) { scene.fog.color.setHex(0x0055ff); scene.fog.near = 0.1; scene.fog.far = 15; scene.background.setHex(0x0055ff); }
@@ -120,6 +144,46 @@
 
             if (controls.isLocked === true && !isInventoryOpen && !isDead && !isGameClear) {
                 updateChunks(); hungerTimer += dt; if (hungerTimer > 30 && gameMode === 1) { hungerTimer = 0; if (currentHunger > 0) { currentHunger = Math.max(0, currentHunger - 0.5); updateStatusUI(); } }
+                
+                // 处理流体更新
+                if (window.liquidQueue && window.liquidQueue.size > 0) {
+                    window.liquidTimer += dt;
+                    if (window.liquidTimer > 0.2) { // 每 0.2 秒流动一次
+                        window.liquidTimer = 0;
+                        const currentQueue = Array.from(window.liquidQueue);
+                        window.liquidQueue.clear();
+                        
+                        currentQueue.forEach(key => {
+                            const [bx, by, bz] = key.split(',').map(Number);
+                            const currentType = getBlock(bx, by, bz);
+                            if (currentType !== 'water') return; // 如果已经不是水了则跳过
+                            
+                            let dist = window.waterDistances.has(key) ? window.waterDistances.get(key) : 0;
+                            const downType = getBlock(bx, by - 1, bz);
+                            const isAirOrReplaceable = (t) => t === null || t === undefined || t === 'tall_grass';
+                            
+                            // 1. 向下流动优先
+                            if (isAirOrReplaceable(downType)) {
+                                setBlock(bx, by - 1, bz, 'water');
+                                window.waterDistances.set(`${bx},${by - 1},${bz}`, 0); // 垂直下落的水重置距离
+                            } 
+                            // 2. 如果下面是固体或水，则向四周水平蔓延
+                            else if (downType !== null && downType !== undefined && dist < 7) {
+                                const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+                                dirs.forEach(d => {
+                                    const nx = bx + d[0], nz = bz + d[1];
+                                    const sideType = getBlock(nx, by, nz);
+                                    if (isAirOrReplaceable(sideType)) {
+                                        const nKey = `${nx},${by},${nz}`;
+                                        setBlock(nx, by, nz, 'water');
+                                        window.waterDistances.set(nKey, dist + 1);
+                                    }
+                                });
+                            }
+                        });
+                    }
+                }
+
                 if (currentHunger >= 18 && currentHealth < 20) { healTimer += dt; if (healTimer > 4) { healTimer = 0; currentHealth++; updateStatusUI(); } } else healTimer = 0;
                 if (currentHunger <= 0) { starveTimer += dt; if (starveTimer > 4) { starveTimer = 0; takeDamage(1); } } else starveTimer = 0;
                 let speedMult = 1.0; if (isPlayerInWater) speedMult = 0.5; if (isPlayerInLava) { speedMult = 0.3; if (playerInvulnTimer <= 0) takeDamage(2); }
@@ -236,11 +300,14 @@
             } else { highlightBox.visible = false; }
 
             Object.values(multiplayerPeers).forEach(p => {
+                p.mesh.position.lerp(p.targetPos, 0.3);
+                p.mesh.rotation.y = p.targetRot;
+                
                 p.mesh.visible = (p.dim === currentDimension);
                 if (!p.mesh.visible) return;
+                
                 const distSq = p.mesh.position.distanceToSquared(camera.position);
-                if (distSq > 4096) { p.mesh.visible = false; return; }
-                p.mesh.position.lerp(p.targetPos, 0.3);
+                if (distSq > 65536) { p.mesh.visible = false; return; } // 增加到 256 方块可见距离
                 p.mesh.rotation.y = p.targetRot;
                 if (p.mesh.nameSprite) p.mesh.nameSprite.lookAt(camera.position);
                 const time = performance.now() * 0.01;
