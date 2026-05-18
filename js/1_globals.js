@@ -4,17 +4,102 @@
         const OriginalMeshLambertMaterial = THREE.MeshLambertMaterial;
         THREE.MeshLambertMaterial = function(parameters) {
             if (window.shadowsEnabled) {
-                const isWater = parameters && (parameters.color === 0x3f76e4 || (parameters.map && parameters.map.uiIcon && parameters.map.uiIcon.includes('water')));
-                const isLava = parameters && (parameters.opacity === 0.9 && parameters.transparent && !parameters.alphaTest);
+                const map = parameters && parameters.map;
+                const blockType = map ? map.blockType : null;
+                
+                const isWater = blockType === 'water' || (parameters && (parameters.color === 0x3f76e4 || (map && map.uiIcon && map.uiIcon.includes('water'))));
+                const isLava = blockType === 'lava' || (parameters && parameters.opacity === 0.9 && parameters.transparent && !parameters.alphaTest);
+                
+                // 基础 PBR 参数，以达到极强质感效果
+                let roughness = 0.8;
+                let metalness = 0.15;
+                let emissive = null;
+                let emissiveIntensity = 1.0;
+                let transparent = parameters && parameters.transparent;
+                let opacity = parameters && parameters.opacity;
+                let depthWrite = parameters && parameters.depthWrite;
+                
+                if (isWater) {
+                    roughness = 0.05;
+                    metalness = 0.9;
+                    transparent = true;
+                    opacity = 0.65;
+                    depthWrite = false;
+                } else if (isLava) {
+                    roughness = 0.2;
+                    metalness = 0.1;
+                    emissive = new THREE.Color(0xff3300);
+                    emissiveIntensity = 2.0;
+                } else if (blockType === 'glass' || blockType === 'ice') {
+                    roughness = 0.02;
+                    metalness = 0.98;
+                } else if (blockType === 'diamond_ore') {
+                    roughness = 0.1;
+                    metalness = 0.95;
+                } else if (blockType === 'gold_ore') {
+                    roughness = 0.15;
+                    metalness = 0.9;
+                } else if (blockType === 'iron_ore') {
+                    roughness = 0.45;
+                    metalness = 0.75;
+                } else if (blockType === 'obsidian') {
+                    roughness = 0.15;
+                    metalness = 0.6;
+                } else if (blockType === 'torch') {
+                    roughness = 0.5;
+                    metalness = 0.1;
+                    emissive = new THREE.Color(0xffaa00);
+                    emissiveIntensity = 2.0;
+                } else if (blockType === 'end_rod') {
+                    roughness = 0.2;
+                    metalness = 0.1;
+                    emissive = new THREE.Color(0xffffff);
+                    emissiveIntensity = 2.2;
+                } else if (blockType === 'magma') {
+                    roughness = 0.9;
+                    metalness = 0.1;
+                    emissive = new THREE.Color(0xff3300);
+                    emissiveIntensity = 1.5;
+                } else if (blockType === 'nether_portal') {
+                    roughness = 0.1;
+                    metalness = 0.5;
+                    emissive = new THREE.Color(0x8a2be2);
+                    emissiveIntensity = 2.5;
+                } else if (blockType === 'spawner') {
+                    roughness = 0.25;
+                    metalness = 0.9;
+                    emissive = new THREE.Color(0x331100);
+                    emissiveIntensity = 0.8;
+                }
+
                 const standardParams = {
                     ...parameters,
-                    roughness: isWater ? 0.1 : (isLava ? 0.05 : 0.8),
-                    metalness: isWater ? 0.9 : (isLava ? 0.9 : 0.1)
+                    roughness,
+                    metalness,
+                    transparent,
+                    opacity,
+                    depthWrite
                 };
+
                 if (isWater) {
                     standardParams.color = new THREE.Color(0x1a4f8f); // 更加深邃清澈的反射蓝色
-                    standardParams.opacity = 0.65;
+                    if (window.generateWaterNormalMap) {
+                        standardParams.normalMap = window.generateWaterNormalMap();
+                        standardParams.normalScale = new THREE.Vector2(0.2, 0.2);
+                    }
                 }
+                
+                if (emissive) {
+                    standardParams.emissive = emissive;
+                    standardParams.emissiveIntensity = emissiveIntensity;
+                }
+                
+                // 如果贴图在异步加载时已经程序化生成了法线贴图，则绑定它
+                if (map && map.normalMap) {
+                    standardParams.normalMap = map.normalMap;
+                    standardParams.normalScale = new THREE.Vector2(1.2, 1.2);
+                }
+
                 const mat = new THREE.MeshStandardMaterial(standardParams);
                 mat.isMeshLambertMaterial = true; // 欺骗外部代码
                 return mat;
@@ -39,16 +124,35 @@
         initNoise();
 
         window.getBiome = (gx, gz) => {
-            if (currentDimension !== 'overworld') return { name: currentDimension === 'nether' ? '下界' : '末地' };
-            const bv = (biomeNoise(gx * 0.005, gz * 0.005) + 1) / 2;
-            if (bv < 0.1) return { name: '海洋', hMult: 0.5, hBase: -10, top: 'sand', sub: 'sand' };
-            if (bv < 0.2) return { name: '冰川', hMult: 0.8, hBase: 2, top: 'snow', sub: 'ice' };
+            const currentDim = typeof currentDimension !== 'undefined' ? currentDimension : 'overworld';
+            if (currentDim !== 'overworld') return { name: currentDim === 'nether' ? '下界' : '末地' };
+            
+            // 领域扭曲：让边界弯曲自然
+            const ox = noise2D(gx * 0.01, gz * 0.01) * 20;
+            const oz = noise2D(gz * 0.01, gx * 0.01) * 20;
+            
+            // 分形群系噪声 (2层叠加)
+            const nx = (gx + ox) * 0.002;
+            const nz = (gz + oz) * 0.002;
+            let bv = (biomeNoise(nx, nz) + 1) / 2;
+            bv = bv * 0.7 + (biomeNoise(nx * 4, nz * 4) + 1) / 2 * 0.3; // 叠加细节
+
+            if (bv < 0.06) return { name: '深海', hMult: 0.3, hBase: -22, top: 'sand', sub: 'sand' };
+            if (bv < 0.12) return { name: '海洋', hMult: 0.5, hBase: -12, top: 'sand', sub: 'sand' };
+            if (bv < 0.18) return { name: '冰川', hMult: 0.8, hBase: 2, top: 'snow', sub: 'ice' };
+            if (bv < 0.24) return { name: '冻原', hMult: 0.7, hBase: 1, top: 'snow', sub: 'dirt' };
             if (bv < 0.35) return { name: '沙漠', hMult: 0.6, hBase: 1, top: 'sand', sub: 'sand' };
-            if (bv < 0.45) return { name: '河流', hMult: 0.3, hBase: -3, top: 'dirt', sub: 'dirt' };
-            if (bv < 0.55) return { name: '沼泽', hMult: 0.4, hBase: -1, top: 'swamp_grass', sub: 'dirt' };
-            if (bv < 0.8) return { name: '平原', hMult: 0.8, hBase: 0, top: 'grass', sub: 'dirt' };
-            if (bv < 0.95) return { name: '树林', hMult: 1.2, hBase: 2, top: 'grass', sub: 'dirt' };
-            return { name: '高山', hMult: 2.5, hBase: 10, top: 'stone', sub: 'stone' };
+            if (bv < 0.42) return { name: '红砂荒漠', hMult: 1.2, hBase: 3, top: 'sand', sub: 'stone' };
+            if (bv < 0.46) return { name: '河流', hMult: 0.3, hBase: -4, top: 'dirt', sub: 'dirt' };
+            if (bv < 0.52) return { name: '沼泽', hMult: 0.4, hBase: 0.5, top: 'swamp_grass', sub: 'dirt' };
+            if (bv < 0.65) return { name: '平原', hMult: 0.8, hBase: 0, top: 'grass', sub: 'dirt' };
+            if (bv < 0.72) return { name: '向日葵平原', hMult: 0.7, hBase: 1, top: 'grass', sub: 'dirt' };
+            if (bv < 0.78) return { name: '桦木林', hMult: 1.1, hBase: 2, top: 'grass', sub: 'dirt' };
+            if (bv < 0.84) return { name: '树林', hMult: 1.2, hBase: 2, top: 'grass', sub: 'dirt' };
+            if (bv < 0.90) return { name: '针叶林', hMult: 1.4, hBase: 3, top: 'grass', sub: 'dirt' };
+            if (bv < 0.95) return { name: '丛林', hMult: 1.6, hBase: 4, top: 'grass', sub: 'dirt' };
+            if (bv < 0.98) return { name: '高山', hMult: 2.5, hBase: 12, top: 'stone', sub: 'stone' };
+            return { name: '雪山', hMult: 3.0, hBase: 16, top: 'snow', sub: 'stone' };
         };
 
         window.modifiedBlocks = { overworld: {}, nether: {}, end: {} };

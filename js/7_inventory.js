@@ -243,6 +243,13 @@
             } else {
                 if (container === 'output') { 
                     if (invState.output && (!invState.dragged || (invState.dragged.type === invState.output.type && invState.dragged.count + invState.output.count <= 64))) { 
+                        if (window.awardAchievement) {
+                            const outType = invState.output.type;
+                            if (outType === 'crafting_table') window.awardAchievement('benchmarking');
+                            else if (outType === 'furnace') window.awardAchievement('hot_topic');
+                            else if (outType === 'stone_pickaxe') window.awardAchievement('upgrade_pickaxe');
+                            else if (outType === 'iron_ingot') window.awardAchievement('acquire_iron');
+                        }
                         if (!invState.dragged) invState.dragged = { ...invState.output }; 
                         else invState.dragged.count += invState.output.count; 
                         

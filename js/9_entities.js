@@ -570,6 +570,7 @@
                     // 靠近捡起逻辑
                     if (dist < 1.5 && this.pickupDelay <= 0) {
                         addBlockToInventory(this.itemType, this.count);
+                        if (window.awardAchievement && this.itemType === 'diamond') window.awardAchievement('diamonds');
                         renderInventoryUI();
                         // 播放一个简单的粒子效果或提示（可选）
                         return true;

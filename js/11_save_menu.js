@@ -57,6 +57,7 @@
             window.modifiedBlocks = { overworld: {}, nether: {}, end: {} };
             window.chestInventories = {}; 
             window.furnaceStates = {};
+            window.achievementsProgress = {}; // 新增：重置成就进度
             
             chunks.forEach(c => blockTypes.forEach(t => scene.remove(c.meshes[t]))); 
             chunks.clear(); 
@@ -105,6 +106,7 @@
                 window.modifiedBlocks = data.mods || { overworld: {}, nether: {}, end: {} };
                 window.chestInventories = data.chests || {};
                 window.furnaceStates = data.furnaces || {};
+                window.achievementsProgress = data.achievements || {}; // 新增：读取成就进度
                 
                 const dims = ['overworld', 'nether', 'end'];
                 dims.forEach(d => {
@@ -135,6 +137,7 @@
                 mods: window.modifiedBlocks,
                 chests: window.chestInventories,
                 furnaces: window.furnaceStates,
+                achievements: window.achievementsProgress || {}, // 新增：保存成就进度
                 player: {
                     x: camera.position.x, y: camera.position.y, z: camera.position.z,
                     dim: currentDimension, hp: currentHealth, hunger: currentHunger,

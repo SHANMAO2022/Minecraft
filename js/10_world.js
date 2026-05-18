@@ -28,9 +28,48 @@
             currentDimension = newDim; chunks = dimensionState[newDim].chunks; worldBlocks = dimensionState[newDim].worldBlocks; entities = dimensionState[newDim].entities;
             chunks.forEach(c => { for (let t in c.meshes) scene.add(c.meshes[t]); }); entities.forEach(e => { scene.add(e.mesh); if (e.beam) scene.add(e.beam); });
             document.getElementById('biome-display').innerText = `Biome: ${newDim.charAt(0).toUpperCase() + newDim.slice(1)}`;
-            if (newDim === 'overworld') { scene.background = skyColors.overworld; scene.fog.color = skyColors.overworld; scene.fog.near = 40; scene.fog.far = 80; ambientLight.intensity = 0.6; directionalLight.intensity = 0.8; }
-            else if (newDim === 'nether') { scene.background = skyColors.nether; scene.fog.color = skyColors.nether; scene.fog.near = 5; scene.fog.far = 30; ambientLight.intensity = 0.8; directionalLight.intensity = 0; }
-            else if (newDim === 'end') { scene.background = skyColors.end; scene.fog.color = skyColors.end; scene.fog.near = 40; scene.fog.far = 100; ambientLight.intensity = 0.4; directionalLight.intensity = 0.2; if (entities.filter(e => e.type === 'dragon').length === 0 && !isGameClear) setTimeout(() => spawnEnderDragon(), 2000); }
+            if (newDim === 'overworld') { 
+                scene.background = skyColors.overworld; 
+                if (window.shadowsEnabled) {
+                    scene.fog.color = skyColors.overworld;
+                    scene.fog.density = 0.007;
+                } else {
+                    scene.fog.color = skyColors.overworld; 
+                    scene.fog.near = 40; 
+                    scene.fog.far = 80; 
+                }
+                ambientLight.intensity = 0.6; 
+                directionalLight.intensity = 0.8; 
+            }
+            else if (newDim === 'nether') { 
+                scene.background = skyColors.nether; 
+                if (window.awardAchievement) window.awardAchievement('into_nether');
+                if (window.shadowsEnabled) {
+                    scene.fog.color = skyColors.nether;
+                    scene.fog.density = 0.035;
+                } else {
+                    scene.fog.color = skyColors.nether; 
+                    scene.fog.near = 5; 
+                    scene.fog.far = 30; 
+                }
+                ambientLight.intensity = 0.8; 
+                directionalLight.intensity = 0; 
+            }
+            else if (newDim === 'end') { 
+                scene.background = skyColors.end; 
+                if (window.awardAchievement) window.awardAchievement('into_end');
+                if (window.shadowsEnabled) {
+                    scene.fog.color = skyColors.end;
+                    scene.fog.density = 0.008;
+                } else {
+                    scene.fog.color = skyColors.end; 
+                    scene.fog.near = 40; 
+                    scene.fog.far = 100; 
+                }
+                ambientLight.intensity = 0.4; 
+                directionalLight.intensity = 0.2; 
+                if (entities.filter(e => e.type === 'dragon').length === 0 && !isGameClear) setTimeout(() => spawnEnderDragon(), 2000); 
+            }
             
             if (dimensionState[newDim].playerPos && (newDim !== 'nether' || dimensionState[newDim].playerPos.y > 15)) {
                 camera.position.copy(dimensionState[newDim].playerPos);
@@ -95,27 +134,7 @@
                 scene.add(meshes[type]);
             }
             
-            // 生物群系定义与分布逻辑 (优化：分形噪声 + 领域扭曲)
-            const getBiome = (gx, gz) => {
-                // 领域扭曲：让边界弯曲自然
-                const ox = noise2D(gx * 0.01, gz * 0.01) * 20;
-                const oz = noise2D(gz * 0.01, gx * 0.01) * 20;
-                
-                // 分形群系噪声 (2层叠加)
-                const nx = (gx + ox) * 0.002;
-                const nz = (gz + oz) * 0.002;
-                let bv = (biomeNoise(nx, nz) + 1) / 2;
-                bv = bv * 0.7 + (biomeNoise(nx * 4, nz * 4) + 1) / 2 * 0.3; // 叠加细节
-
-                if (bv < 0.1) return { name: '海洋', hMult: 0.5, hBase: -12, top: 'sand', sub: 'sand' };
-                if (bv < 0.22) return { name: '冰川', hMult: 0.8, hBase: 2, top: 'snow', sub: 'ice' };
-                if (bv < 0.38) return { name: '沙漠', hMult: 0.6, hBase: 1, top: 'sand', sub: 'sand' };
-                if (bv < 0.48) return { name: '河流', hMult: 0.3, hBase: -4, top: 'dirt', sub: 'dirt' };
-                if (bv < 0.58) return { name: '沼泽', hMult: 0.5, hBase: 0.5, top: 'swamp_grass', sub: 'dirt' }; // 增加陆地
-                if (bv < 0.82) return { name: '平原', hMult: 0.8, hBase: 0, top: 'grass', sub: 'dirt' };
-                if (bv < 0.95) return { name: '树林', hMult: 1.2, hBase: 2, top: 'grass', sub: 'dirt' };
-                return { name: '高山', hMult: 2.5, hBase: 12, top: 'stone', sub: 'stone' };
-            };
+            const getBiome = window.getBiome;
 
             const blocks = new Map();
             const dummy = new THREE.Object3D();
@@ -139,7 +158,64 @@
                             } else if (y > surfaceY - 3) {
                                 type = biome.sub;
                             }
-                            blocks.set(`${wx},${y},${wz}`, type);
+                            
+                            // 3D 矿洞与大巨洞雕刻
+                            let isCarved = false;
+                            if (y > bottomY + 2 && y < surfaceY - 3) {
+                                // 1. 蠕虫矿洞 (中频噪声绝对值)
+                                const n3 = noise3D(wx * 0.04, y * 0.08, wz * 0.04);
+                                const n3_detail = noise3D(wx * 0.12, y * 0.24, wz * 0.12);
+                                const wormValue = Math.abs(n3 * 0.85 + n3_detail * 0.15);
+                                
+                                // 2. 大矿洞巨室 (低频噪声)
+                                const cavernValue = noise3D(wx * 0.015, y * 0.03, wz * 0.015);
+                                
+                                let wormThresh = 0.08;
+                                let cavernThresh = 0.55;
+                                if (biome.name === '平原') {
+                                    wormThresh = 0.16; // 平原下蠕虫通道概率翻倍
+                                    cavernThresh = 0.43; // 平原下巨型大矿洞判定门槛显著降低（几率与体积变大）
+                                }
+                                
+                                // 排除要塞核心区，以防冲刷要塞
+                                const isInsideStronghold = (wx >= 54 && wx <= 74 && wz >= 54 && wz <= 74 && y >= -28 && y <= -22);
+                                
+                                if (!isInsideStronghold && (wormValue < wormThresh || cavernValue > cavernThresh)) {
+                                    isCarved = true;
+                                }
+                            }
+                            
+                            if (!isCarved) {
+                                // 3D 矿物矿脉聚集生成 (仅在 stone 层中生成)
+                                if (type === 'stone') {
+                                    const oreNoiseVal = noise3D(wx * 0.25, y * 0.25, wz * 0.25);
+                                    if (oreNoiseVal > 0.68) { // 约占石头的 3%-5%
+                                        // 确定性哈希选择矿石种类，使同一个 3x3x3 矿脉格子内生成相同的矿物
+                                        const cxGrid = Math.floor(wx / 3);
+                                        const cyGrid = Math.floor(y / 3);
+                                        const czGrid = Math.floor(wz / 3);
+                                        const seed = Math.sin(cxGrid * 12.9898 + cyGrid * 78.233 + czGrid * 37.719) * 43758.5453;
+                                        const r = seed - Math.floor(seed);
+                                        
+                                        if (y < -45) { // 深层
+                                            if (r < 0.12) type = 'diamond_ore';
+                                            else if (r < 0.32) type = 'gold_ore';
+                                            else if (r < 0.65) type = 'iron_ore';
+                                            else type = 'coal_ore';
+                                        } else if (y < -16) { // 中深层
+                                            if (r < 0.20) type = 'gold_ore';
+                                            else if (r < 0.55) type = 'iron_ore';
+                                            else type = 'coal_ore';
+                                        } else if (y < 8) { // 浅层
+                                            if (r < 0.35) type = 'iron_ore';
+                                            else type = 'coal_ore';
+                                        } else { // 极浅层及地表附近
+                                            type = 'coal_ore';
+                                        }
+                                    }
+                                }
+                                blocks.set(`${wx},${y},${wz}`, type);
+                            }
                         }
                         
                         // 水填充 (只有在 surfaceY < 0 时才填充，确保不与陆地重叠)
@@ -175,40 +251,109 @@
                         }
 
                         if (surfaceY >= 0) {
-                            // 树木生成 (树林和沼泽都有树)
-                            if ((biome.name === '树林' && rand < 0.02) || (biome.name === '沼泽' && rand < 0.015)) {
+                            // 树木与群系植被特征生成
+                            const isTreeBiome = (biome.name === '树林' || biome.name === '沼泽' || biome.name === '桦木林' || biome.name === '针叶林' || biome.name === '丛林');
+                            const treeChance = biome.name === '树林' ? 0.025 :
+                                               biome.name === '桦木林' ? 0.025 :
+                                               biome.name === '沼泽' ? 0.015 :
+                                               biome.name === '针叶林' ? 0.03 :
+                                               biome.name === '丛林' ? 0.065 : 0;
+                            
+                            if (isTreeBiome && rand < treeChance) {
                                 if (currentTop === 'grass' || currentTop === 'swamp_grass') {
-                                    const trunkHeight = biome.name === '沼泽' ? 4 : 5;
-                                    const leafType = biome.name === '沼泽' ? 'swamp_leaves' : 'leaves';
-                                    for (let ty = 1; ty <= trunkHeight; ty++) blocks.set(`${wx},${surfaceY + ty},${wz}`, 'log');
-                                    for (let lx = -2; lx <= 2; lx++) for (let lz = -2; lz <= 2; lz++) for (let ly = trunkHeight - 2; ly <= trunkHeight + 1; ly++) {
-                                        if (Math.abs(lx) + Math.abs(lz) + Math.abs(ly-trunkHeight) <= 3) {
-                                            const lX = wx+lx, lY = surfaceY+ly, lZ = wz+lz;
-                                            const lk = `${lX},${lY},${lZ}`;
-                                            const targetCx = Math.floor(lX/chunkSize);
-                                            const targetCz = Math.floor(lZ/chunkSize);
-                                            if (targetCx === cx && targetCz === cz) {
-                                                if (!blocks.has(lk)) blocks.set(lk, leafType);
-                                            } else {
-                                                if (!modifiedBlocks[currentDimension][lk]) {
-                                                    modifiedBlocks[currentDimension][lk] = leafType;
-                                                    const nChunk = chunks.get(`${targetCx},${targetCz}`);
-                                                    if (nChunk && !nChunk.blocks.has(lk)) {
-                                                        nChunk.blocks.set(lk, leafType);
-                                                        if (typeof rebuildChunkMesh === 'function') rebuildChunkMesh(nChunk);
+                                    let trunkHeight = 5;
+                                    let leafType = 'leaves';
+                                    if (biome.name === '沼泽') {
+                                        trunkHeight = 4;
+                                        leafType = 'swamp_leaves';
+                                    } else if (biome.name === '针叶林') {
+                                        trunkHeight = 6;
+                                    } else if (biome.name === '丛林') {
+                                        trunkHeight = 7;
+                                    } else if (biome.name === '桦木林') {
+                                        trunkHeight = 5;
+                                    }
+                                    
+                                    // 1. 生成树干
+                                    for (let ty = 1; ty <= trunkHeight; ty++) {
+                                        blocks.set(`${wx},${surfaceY + ty},${wz}`, 'log');
+                                    }
+                                    
+                                    // 2. 生成树叶
+                                    if (biome.name === '针叶林') {
+                                        // 松树：圆锥形/塔状交错树叶
+                                        for (let ly = 2; ly <= trunkHeight + 1; ly++) {
+                                            let rad = 1;
+                                            if (ly === trunkHeight + 1) rad = 0;
+                                            else if (ly === trunkHeight) rad = 1;
+                                            else if (ly % 2 === 0) rad = 2;
+                                            else rad = 1;
+                                            
+                                            for (let lx = -rad; lx <= rad; lx++) {
+                                                for (let lz = -rad; lz <= rad; lz++) {
+                                                    if (Math.abs(lx) + Math.abs(lz) <= rad) {
+                                                        const lX = wx + lx, lY = surfaceY + ly, lZ = wz + lz;
+                                                        const lk = `${lX},${lY},${lZ}`;
+                                                        const targetCx = Math.floor(lX / chunkSize);
+                                                        const targetCz = Math.floor(lZ / chunkSize);
+                                                        if (targetCx === cx && targetCz === cz) {
+                                                            if (!blocks.has(lk)) blocks.set(lk, leafType);
+                                                        } else {
+                                                            if (!modifiedBlocks[currentDimension][lk]) {
+                                                                modifiedBlocks[currentDimension][lk] = leafType;
+                                                                const nChunk = chunks.get(`${targetCx},${targetCz}`);
+                                                                if (nChunk && !nChunk.blocks.has(lk)) {
+                                                                    nChunk.blocks.set(lk, leafType);
+                                                                    if (typeof rebuildChunkMesh === 'function') rebuildChunkMesh(nChunk);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        // 普通树林、丛林、沼泽、桦木林：标准圆球/扁球形树叶
+                                        const leafRadius = biome.name === '丛林' ? 4 : 3;
+                                        for (let lx = -2; lx <= 2; lx++) {
+                                            for (let lz = -2; lz <= 2; lz++) {
+                                                for (let ly = trunkHeight - 2; ly <= trunkHeight + 1; ly++) {
+                                                    if (Math.abs(lx) + Math.abs(lz) + Math.abs(ly - trunkHeight) <= leafRadius) {
+                                                        const lX = wx + lx, lY = surfaceY + ly, lZ = wz + lz;
+                                                        const lk = `${lX},${lY},${lZ}`;
+                                                        const targetCx = Math.floor(lX / chunkSize);
+                                                        const targetCz = Math.floor(lZ / chunkSize);
+                                                        if (targetCx === cx && targetCz === cz) {
+                                                            if (!blocks.has(lk)) blocks.set(lk, leafType);
+                                                        } else {
+                                                            if (!modifiedBlocks[currentDimension][lk]) {
+                                                                modifiedBlocks[currentDimension][lk] = leafType;
+                                                                const nChunk = chunks.get(`${targetCx},${targetCz}`);
+                                                                if (nChunk && !nChunk.blocks.has(lk)) {
+                                                                    nChunk.blocks.set(lk, leafType);
+                                                                    if (typeof rebuildChunkMesh === 'function') rebuildChunkMesh(nChunk);
+                                                                }
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
                                         }
                                     }
                                 }
-                            } 
-                            // 装饰物
+                            }
+                            // 3. 其他装饰与特有物
                             else if (biome.name === '沙漠' && rand < 0.01 && currentTop === 'sand') {
                                 for (let cy = 1; cy <= 3; cy++) blocks.set(`${wx},${surfaceY + cy},${wz}`, 'cactus');
+                            } else if (biome.name === '红砂荒漠' && rand < 0.01 && currentTop === 'sand') {
+                                // 红砂荒漠也可以有仙人掌
+                                for (let cy = 1; cy <= 2; cy++) blocks.set(`${wx},${surfaceY + cy},${wz}`, 'cactus');
                             } else if (biome.name === '沼泽' && rand < 0.03 && surfaceY === 0) {
                                 blocks.set(`${wx},1,${wz}`, 'lily_pad');
                             } else if (rand < 0.05 && (currentTop === 'grass' || currentTop === 'swamp_grass')) {
+                                blocks.set(`${wx},${surfaceY + 1},${wz}`, 'tall_grass');
+                            } else if (biome.name === '向日葵平原' && rand < 0.15 && currentTop === 'grass') {
+                                // 向日葵平原/花海有极高密度的草和植被
                                 blocks.set(`${wx},${surfaceY + 1},${wz}`, 'tall_grass');
                             }
                         }
@@ -333,13 +478,50 @@
                     return null; // 邻居区块已加载但没有这个方块，说明是空气
                 }
                 
-                // 3. 如果邻居区块未加载，通过噪声函数预测地形
+                // 3. 如果邻居区块未加载，通过分形噪声与3D矿洞函数预测地形与洞穴，杜绝边界剔除裂隙与闪烁
                 if (currentDimension === 'overworld') {
-                    const sY = Math.floor(noise2D(x * 0.04, z * 0.04) * 5);
-                    if (y <= sY) return 'stone'; // 预测为固体
-                    if (y <= 0) return 'water';  // 预测为水
+                    const biome = window.getBiome(x, z);
+                    const sY = Math.floor(noise2D(x * 0.04, z * 0.04) * 6 * biome.hMult + biome.hBase);
+                    
+                    if (y <= sY) {
+                        const bottomY = -64;
+                        if (y === bottomY || y === bottomY + 1) return 'bedrock';
+                        
+                        // 预测 3D 矿洞与巨洞雕刻
+                        if (y > bottomY + 2 && y < sY - 3) {
+                            const n3 = noise3D(x * 0.04, y * 0.08, z * 0.04);
+                            const n3_detail = noise3D(x * 0.12, y * 0.24, z * 0.12);
+                            const wormValue = Math.abs(n3 * 0.85 + n3_detail * 0.15);
+                            
+                            const cavernValue = noise3D(x * 0.015, y * 0.03, z * 0.015);
+                            
+                            let wormThresh = 0.08;
+                            let cavernThresh = 0.55;
+                            if (biome.name === '平原') {
+                                wormThresh = 0.16;
+                                cavernThresh = 0.43;
+                            }
+                            
+                            const isInsideStronghold = (x >= 54 && x <= 74 && z >= 54 && z <= 74 && y >= -28 && y <= -22);
+                            
+                            if (!isInsideStronghold && (wormValue < wormThresh || cavernValue > cavernThresh)) {
+                                return null;
+                            }
+                        }
+                        
+                        // 预测固体方块类型
+                        if (y === sY) {
+                            let type = biome.top;
+                            if (sY < 0 && (type === 'grass' || type === 'swamp_grass')) type = (biome.name === '沼泽' ? 'dirt' : 'sand');
+                            if (biome.name === '高山' && y > 15) type = 'snow';
+                            return type;
+                        }
+                        if (y > sY - 3) return biome.sub;
+                        return 'stone';
+                    }
+                    if (y <= 0) return 'water';
                 }
-                return null; // 预测为空气
+                return null;
             };
 
             const isTransparent = (t) => {
@@ -455,8 +637,45 @@
                 }
                 
                 if (currentDimension === 'overworld') {
-                    const sY = Math.floor(noise2D(x * 0.04, z * 0.04) * 5);
-                    if (y <= sY) return 'stone';
+                    const biome = window.getBiome(x, z);
+                    const sY = Math.floor(noise2D(x * 0.04, z * 0.04) * 6 * biome.hMult + biome.hBase);
+                    
+                    if (y <= sY) {
+                        const bottomY = -64;
+                        if (y === bottomY || y === bottomY + 1) return 'bedrock';
+                        
+                        // 预测 3D 矿洞与巨洞雕刻
+                        if (y > bottomY + 2 && y < sY - 3) {
+                            const n3 = noise3D(x * 0.04, y * 0.08, z * 0.04);
+                            const n3_detail = noise3D(x * 0.12, y * 0.24, z * 0.12);
+                            const wormValue = Math.abs(n3 * 0.85 + n3_detail * 0.15);
+                            
+                            const cavernValue = noise3D(x * 0.015, y * 0.03, z * 0.015);
+                            
+                            let wormThresh = 0.08;
+                            let cavernThresh = 0.55;
+                            if (biome.name === '平原') {
+                                wormThresh = 0.16;
+                                cavernThresh = 0.43;
+                            }
+                            
+                            const isInsideStronghold = (x >= 54 && x <= 74 && z >= 54 && z <= 74 && y >= -28 && y <= -22);
+                            
+                            if (!isInsideStronghold && (wormValue < wormThresh || cavernValue > cavernThresh)) {
+                                return null;
+                            }
+                        }
+                        
+                        // 预测固体方块类型
+                        if (y === sY) {
+                            let type = biome.top;
+                            if (sY < 0 && (type === 'grass' || type === 'swamp_grass')) type = (biome.name === '沼泽' ? 'dirt' : 'sand');
+                            if (biome.name === '高山' && y > 15) type = 'snow';
+                            return type;
+                        }
+                        if (y > sY - 3) return biome.sub;
+                        return 'stone';
+                    }
                     if (y <= 0) return 'water';
                 }
                 return null;

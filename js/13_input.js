@@ -88,6 +88,7 @@
                             worldTime += (CYCLE_LENGTH - cycleTime);
                             currentHealth = 20; updateStatusUI();
                             appendChat('已设置重生点，并安稳地度过了夜晚。');
+                            if (window.awardAchievement) window.awardAchievement('sweet_dreams');
                         } else {
                             appendChat('已设置重生点，只能在夜间睡觉。');
                         }
@@ -167,7 +168,7 @@
                         if (chestNeighbors > 1) { appendChat('无法在此放置箱子（附近已有多个箱子）。'); return; }
                         if (chestNeighbors === 1) { let neighborChestNeighbors = 0; for (const [dx, dy, dz] of neighbors) { if ((foundNeighbor.x + dx !== newBx || foundNeighbor.z + dz !== newBz) && getBlock(foundNeighbor.x + dx, foundNeighbor.y, foundNeighbor.z + dz) === 'chest') { neighborChestNeighbors++; } } if (neighborChestNeighbors > 0) { appendChat('无法在此放置箱子（目标箱子已配对）。'); return; } }
                     }
-                    if (ITEMS[placeType].type === 'block') { const newBx = bx + Math.round(intersect.face.normal.x); const newBy = by + Math.round(intersect.face.normal.y); const newBz = bz + Math.round(intersect.face.normal.z); const newBlock = getBlock(newBx, newBy, newBz); const camPos = camera.position; const epsilon = 0.001; const pMinX = camPos.x - 0.28 + epsilon; const pMaxX = camPos.x + 0.28 - epsilon; const pMinY = camPos.y - 1.55 + epsilon; const pMaxY = camPos.y + 0.19 - epsilon; const pMinZ = camPos.z - 0.28 + epsilon; const pMaxZ = camPos.z + 0.28 - epsilon; const bMinX = newBx; const bMaxX = newBx + 1; const bMinY = newBy; const bMaxY = newBy + 1; const bMinZ = newBz; const bMaxZ = newBz + 1; const playerIntersecting = !(pMaxX <= bMinX || pMinX >= bMaxX || pMaxY <= bMinY || pMinY >= bMaxY || pMaxZ <= bMinZ || pMinZ >= bMaxZ); if ((!newBlock || newBlock === 'water' || newBlock === 'lava') && (!playerIntersecting || placeType === 'tall_grass' || placeType === 'torch')) { if (placeType === 'bed') { let dir = new THREE.Vector3(); camera.getWorldDirection(dir); let dx = 0, dz = 0; if (Math.abs(dir.x) > Math.abs(dir.z)) dx = dir.x > 0 ? 1 : -1; else dz = dir.z > 0 ? 1 : -1; const headX = newBx + dx; const headZ = newBz + dz; const headBlock = getBlock(headX, newBy, headZ); if (!headBlock || headBlock === 'water' || headBlock || 'lava') { setBlock(newBx, newBy, newBz, 'bed_foot'); setBlock(headX, newBy, headZ, 'bed_head'); if (gameMode !== 0) { activeItem.count--; if (activeItem.count <= 0) invState.hotbar[currentSlotIndex] = null; } renderInventoryUI(); } else { appendChat('空间不足，无法放下床。'); } return; } setBlock(newBx, newBy, newBz, placeType); if (gameMode !== 0) { activeItem.count--; if (activeItem.count <= 0) invState.hotbar[currentSlotIndex] = null; } renderInventoryUI(); } return; }
+                    if (ITEMS[placeType].type === 'block') { const newBx = bx + Math.round(intersect.face.normal.x); const newBy = by + Math.round(intersect.face.normal.y); const newBz = bz + Math.round(intersect.face.normal.z); const newBlock = getBlock(newBx, newBy, newBz); const camPos = camera.position; const epsilon = 0.001; const pMinX = camPos.x - 0.28 + epsilon; const pMaxX = camPos.x + 0.28 - epsilon; const pMinY = camPos.y - 1.55 + epsilon; const pMaxY = camPos.y + 0.19 - epsilon; const pMinZ = camPos.z - 0.28 + epsilon; const pMaxZ = camPos.z + 0.28 - epsilon; const bMinX = newBx; const bMaxX = newBx + 1; const bMinY = newBy; const bMaxY = newBy + 1; const bMinZ = newBz; const bMaxZ = newBz + 1; const playerIntersecting = !(pMaxX <= bMinX || pMinX >= bMaxX || pMaxY <= bMinY || pMinY >= bMaxY || pMaxZ <= bMinZ || pMinZ >= bMaxZ); if ((!newBlock || newBlock === 'water' || newBlock === 'lava') && (!playerIntersecting || placeType === 'tall_grass' || placeType === 'torch')) { if (placeType === 'bed') { let dir = new THREE.Vector3(); camera.getWorldDirection(dir); let dx = 0, dz = 0; if (Math.abs(dir.x) > Math.abs(dir.z)) dx = dir.x > 0 ? 1 : -1; else dz = dir.z > 0 ? 1 : -1; const headX = newBx + dx; const headZ = newBz + dz; const headBlock = getBlock(headX, newBy, headZ); if (!headBlock || headBlock === 'water' || headBlock || 'lava') { setBlock(newBx, newBy, newBz, 'bed_foot'); setBlock(headX, newBy, headZ, 'bed_head'); if (gameMode !== 0) { activeItem.count--; if (activeItem.count <= 0) invState.hotbar[currentSlotIndex] = null; } renderInventoryUI(); } else { appendChat('空间不足，无法放下床。'); } return; } setBlock(newBx, newBy, newBz, placeType); if (window.awardAchievement) { if (placeType === 'crafting_table') window.awardAchievement('benchmarking'); else if (placeType === 'furnace') window.awardAchievement('hot_topic'); else if (placeType === 'chest') window.awardAchievement('treasure'); } if (gameMode !== 0) { activeItem.count--; if (activeItem.count <= 0) invState.hotbar[currentSlotIndex] = null; } renderInventoryUI(); } return; }
                 }
                 if (activeItem.type === 'ender_eye' && currentDimension === 'overworld') { actionType = 'swing'; actionTimer = 0.3; spawnEnderEyeEntity(camera.position.x, camera.position.y, camera.position.z); if (gameMode !== 0) { activeItem.count--; if (activeItem.count <= 0) invState.hotbar[currentSlotIndex] = null; } renderInventoryUI(); return; }
             }
@@ -184,6 +185,9 @@
                         if (hitMob.type === 'enderman') { if (hitMob.onHit) hitMob.onHit(); } else if (hitMob.type === 'crystal') { hitMob.hp = 0; } else if (hitMob.type !== 'dragon') { const kb = new THREE.Vector3().subVectors(hitMob.mesh.position, camera.position).normalize(); if (hitMob.type === 'pig') { hitMob.target.copy(hitMob.mesh.position).addScaledVector(kb, 3); hitMob.state = 'wander'; hitMob.timer = 2; } else { const newPos = hitMob.mesh.position.clone().addScaledVector(kb, 1); if (!checkCollisionGeneric(newPos.x, newPos.y - 0.5, newPos.z, 0.4, 0.8)) hitMob.mesh.position.copy(newPos); } }
                         
                         if (hitMob.hp <= 0 && hitMob.type !== 'dragon' && hitMob.type !== 'crystal') { 
+                            if (window.trackMonsterKill && ['zombie', 'spider', 'enderman', 'blaze'].includes(hitMob.type)) {
+                                window.trackMonsterKill(hitMob.type);
+                            }
                             // 掉落经验球
                             const xpValue = hitMob.type === 'pig' || hitMob.type === 'cow' ? 2 : 5;
                             if (window.spawnXPOrb) {
@@ -286,6 +290,27 @@
                 }
                 return;
             }
+            if (event.code === 'KeyL') {
+                const achScreen = document.getElementById('achievements-screen');
+                const pauseScreen = document.getElementById('pause-screen');
+                if (controls.isLocked) {
+                    window.openedAchievementsFromPause = false;
+                    controls.unlock();
+                    setTimeout(() => {
+                        pauseScreen.style.display = 'none';
+                        achScreen.style.display = 'flex';
+                        if (window.renderAchievementsList) window.renderAchievementsList();
+                    }, 50);
+                } else if (achScreen.style.display === 'flex') {
+                    achScreen.style.display = 'none';
+                    if (window.openedAchievementsFromPause) {
+                        pauseScreen.style.display = 'flex';
+                    } else {
+                        controls.lock();
+                    }
+                }
+                return;
+            }
             if (isInventoryOpen) return;
             if (event.code.startsWith('Digit')) { const digit = parseInt(event.code.replace('Digit', '')); if (digit >= 1 && digit <= 9) { currentSlotIndex = digit - 1; renderInventoryUI(); } }
             
@@ -304,7 +329,39 @@
                 }
             }
 
-            switch (event.code) { case 'ArrowUp': case 'KeyW': moveForward = true; break; case 'ArrowLeft': case 'KeyA': moveLeft = true; break; case 'ArrowDown': case 'KeyS': moveBackward = true; break; case 'ArrowRight': case 'KeyD': moveRight = true; break; case 'Space': jumpPressed = true; const now = performance.now(); if (now - lastSpacePress < 300 && gameMode === 0) { isFlying = !isFlying; velocity.y = 0; } lastSpacePress = now; break; case 'ShiftLeft': case 'ShiftRight': shiftPressed = true; break; }
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW':
+                    moveForward = true;
+                    break;
+                case 'ArrowLeft':
+                case 'KeyA':
+                    moveLeft = true;
+                    break;
+                case 'ArrowDown':
+                case 'KeyS':
+                    moveBackward = true;
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    moveRight = true;
+                    break;
+                case 'Space':
+                    jumpPressed = true;
+                    if (!event.repeat) {
+                        const now = performance.now();
+                        if (now - lastSpacePress < 300 && gameMode === 0) {
+                            isFlying = !isFlying;
+                            velocity.y = 0;
+                        }
+                        lastSpacePress = now;
+                    }
+                    break;
+                case 'ShiftLeft':
+                case 'ShiftRight':
+                    shiftPressed = true;
+                    break;
+            }
         };
         const onKeyUp = function (event) { switch (event.code) { case 'ArrowUp': case 'KeyW': moveForward = false; break; case 'ArrowLeft': case 'KeyA': moveLeft = false; break; case 'ArrowDown': case 'KeyS': moveBackward = false; break; case 'ArrowRight': case 'KeyD': moveRight = false; break; case 'Space': jumpPressed = false; break; case 'ShiftLeft': case 'ShiftRight': shiftPressed = false; break; } };
         document.addEventListener('keydown', onKeyDown); document.addEventListener('keyup', onKeyUp);

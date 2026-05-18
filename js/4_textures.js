@@ -19,6 +19,120 @@
             dt.magFilter = THREE.NearestFilter;
             destroyStages.push(new THREE.MeshBasicMaterial({ map: dt, transparent: true, alphaTest: 0.1, polygonOffset: true, polygonOffsetFactor: -1 }));
         }
+
+        // ==================== 核心光影黑科技：程序化 3D 浮雕法线贴图生成器 ====================
+        window.generateProceduralNormalMap = function(img, strength = 1.0) {
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width || 16;
+                canvas.height = img.height || 16;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                return window.generateProceduralNormalMapFromCanvas(canvas, strength);
+            } catch (e) {
+                console.warn("Procedural normal map failed", e);
+                return null;
+            }
+        };
+
+        window.generateProceduralNormalMapFromCanvas = function(canvas, strength = 1.0) {
+            try {
+                const ctx = canvas.getContext('2d');
+                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imgData.data;
+                const width = canvas.width;
+                const height = canvas.height;
+                const normalData = new Uint8ClampedArray(data.length);
+
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const idx = (y * width + x) * 4;
+                        const getVal = (px, py) => {
+                            const nx = (px + width) % width;
+                            const ny = (py + height) % height;
+                            const nIdx = (ny * width + nx) * 4;
+                            return (data[nIdx] * 0.299 + data[nIdx+1] * 0.587 + data[nIdx+2] * 0.114) / 255.0;
+                        };
+
+                        // 索贝尔算子 (Sobel Operator)
+                        const dx = 
+                            -1 * getVal(x-1, y-1) + 1 * getVal(x+1, y-1) +
+                            -2 * getVal(x-1, y)   + 2 * getVal(x+1, y) +
+                            -1 * getVal(x-1, y+1) + 1 * getVal(x+1, y+1);
+
+                        const dy = 
+                            -1 * getVal(x-1, y-1) - 2 * getVal(x, y-1) - 1 * getVal(x+1, y-1) +
+                            1 * getVal(x-1, y+1) + 2 * getVal(x, y+1) + 1 * getVal(x+1, y+1);
+
+                        let nx = -dx * strength;
+                        let ny = -dy * strength;
+                        let nz = 1.0;
+
+                        const len = Math.sqrt(nx*nx + ny*ny + nz*nz);
+                        nx /= len; ny /= len; nz /= len;
+
+                        // 映射法线向量分量到 0-255 RGB 像素空间
+                        normalData[idx]   = Math.floor((nx * 0.5 + 0.5) * 255);
+                        normalData[idx+1] = Math.floor((ny * 0.5 + 0.5) * 255);
+                        normalData[idx+2] = Math.floor((nz * 0.5 + 0.5) * 255);
+                        normalData[idx+3] = 255;
+                    }
+                }
+
+                const normalCanvas = document.createElement('canvas');
+                normalCanvas.width = width;
+                normalCanvas.height = height;
+                const normalCtx = normalCanvas.getContext('2d');
+                const normalImgData = normalCtx.createImageData(width, height);
+                normalImgData.data.set(normalData);
+                normalCtx.putImageData(normalImgData, 0, 0);
+
+                const normalTexture = new THREE.CanvasTexture(normalCanvas);
+                normalTexture.magFilter = THREE.NearestFilter;
+                normalTexture.minFilter = THREE.NearestFilter;
+                normalTexture.wrapS = THREE.RepeatWrapping;
+                normalTexture.wrapT = THREE.RepeatWrapping;
+                return normalTexture;
+            } catch (e) {
+                console.warn("Canvas normal map processing failed", e);
+                return null;
+            }
+        };
+
+        window.generateWaterNormalMap = function() {
+            try {
+                const size = 32;
+                const canvas = document.createElement('canvas');
+                canvas.width = size;
+                canvas.height = size;
+                const ctx = canvas.getContext('2d');
+                const imgData = ctx.createImageData(size, size);
+                const data = imgData.data;
+
+                for (let y = 0; y < size; y++) {
+                    for (let x = 0; x < size; x++) {
+                        const idx = (y * size + x) * 4;
+                        // 生成波光粼粼的正弦波起伏高程
+                        const val1 = Math.sin(x * 0.4) * Math.cos(y * 0.4);
+                        const val2 = Math.sin(x * 0.2 + y * 0.2) * 0.5;
+                        const h = (val1 + val2 + 1.5) / 3.0;
+
+                        const gray = Math.floor(h * 255);
+                        data[idx] = gray;
+                        data[idx+1] = gray;
+                        data[idx+2] = gray;
+                        data[idx+3] = 255;
+                    }
+                }
+                ctx.putImageData(imgData, 0, 0);
+                return window.generateProceduralNormalMapFromCanvas(canvas, 2.0); // 调高强度以凸显水面动态反射
+            } catch (e) {
+                console.warn("Water normal map failed", e);
+                return null;
+            }
+        };
+        // ======================================================================================
+
         function createPixelTexture(type) {
             const fileName = (type === 'door') ? 'oak_door' : type;
             const path = 'textures/' + fileName + '.png' + CACHE_V;
@@ -28,6 +142,8 @@
             
             const img = new Image();
             const texture = new THREE.Texture(img);
+            texture.blockType = type; // 绑定方块类型以在后面执行细分 PBR 个性化修饰
+
             img.onload = () => {
                 // 针对新版 Three.js 的深度更新
                 if (texture.source) texture.source.needsUpdate = true;
@@ -39,6 +155,38 @@
                     // Populate itemPixels for 3D hand items
                     const imgData = ctx.getImageData(0, 0, 16, 16);
                     itemPixels[type] = new Uint8ClampedArray(imgData.data);
+
+                    // 程序化生成该贴图对应的微表面 3D 法线贴图
+                    if (window.shadowsEnabled) {
+                        try {
+                            const normalTex = window.generateProceduralNormalMap(img, 1.2);
+                            if (normalTex) {
+                                texture.normalMap = normalTex;
+                                
+                                // 全局遍历材质，把生成的法线贴图绑定到引用本材质的物体上
+                                for (let key in materials) {
+                                    const matObj = materials[key];
+                                    if (Array.isArray(matObj)) {
+                                        matObj.forEach(m => {
+                                            if (m && m.map === texture) {
+                                                m.normalMap = normalTex;
+                                                m.normalScale = new THREE.Vector2(1.2, 1.2);
+                                                m.needsUpdate = true;
+                                            }
+                                        });
+                                    } else if (matObj) {
+                                        if (matObj.map === texture) {
+                                            matObj.normalMap = normalTex;
+                                            matObj.normalScale = new THREE.Vector2(1.2, 1.2);
+                                            matObj.needsUpdate = true;
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (err) {
+                            console.warn("Could not generate normal map for", type, err);
+                        }
+                    }
                     
                     // 染色逻辑：草(顶面和侧面)、叶子、水
                     const tintTypes = { 

@@ -135,9 +135,84 @@
             }
             let isPlayerInWater = false; let isPlayerInLava = false;
             if (controls.isLocked === true) { const curBx = Math.floor(camera.position.x); const curBy = Math.floor(camera.position.y - 1); const curByEye = Math.floor(camera.position.y); const curBz = Math.floor(camera.position.z); const bFeet = getBlock(curBx, curBy, curBz); const bHead = getBlock(curBx, curByEye, curBz); if (bFeet === 'water' || bHead === 'water') isPlayerInWater = true; if (bFeet === 'lava' || bHead === 'lava') isPlayerInLava = true; if (bFeet === 'magma' && !isFlying && gameMode === 1 && playerInvulnTimer <= 0) { takeDamage(1); } }
-            if (isPlayerInWater) { scene.fog.color.setHex(0x0055ff); scene.fog.near = 0.1; scene.fog.far = 15; scene.background.setHex(0x0055ff); }
-            else if (isPlayerInLava) { scene.fog.color.setHex(0xff3300); scene.fog.near = 0.1; scene.fog.far = 5; scene.background.setHex(0xff3300); }
-            else { if (currentDimension === 'overworld') { if (sunHeight > 0.2) { skyCurrent.copy(skyColors.overworld); ambientLight.intensity = 0.6; directionalLight.intensity = 0.8; } else if (sunHeight > 0) { const t = sunHeight / 0.2; skyCurrent.copy(skyColors.dusk).lerp(skyColors.overworld, t); ambientLight.intensity = 0.2 + 0.4 * t; directionalLight.intensity = 0.8 * t; } else if (sunHeight > -0.2) { const t = (sunHeight + 0.2) / 0.2; skyCurrent.copy(skyColors.night).lerp(skyColors.dusk, t); ambientLight.intensity = 0.1 + 0.1 * t; directionalLight.intensity = 0; } else { skyCurrent.copy(skyColors.night); ambientLight.intensity = 0.1; directionalLight.intensity = 0; } const camY = camera.position.y; const targetColor = skyCurrent.clone(); if (camY < 0) { const depthFactor = Math.min(1, -camY / 30); targetColor.lerp(new THREE.Color(0x020202), depthFactor); scene.fog.near = 20 - 15 * depthFactor; scene.fog.far = 50 - 30 * depthFactor; } else { scene.fog.near = 40; scene.fog.far = 80; } scene.background = targetColor; scene.fog.color = targetColor; } }
+            
+            if (isPlayerInWater) { 
+                scene.background.setHex(0x0055ff);
+                if (window.shadowsEnabled) {
+                    scene.fog.color.setHex(0x0044bb);
+                    scene.fog.density = 0.08;
+                } else {
+                    scene.fog.color.setHex(0x0055ff);
+                    scene.fog.near = 0.1; scene.fog.far = 15; 
+                }
+            }
+            else if (isPlayerInLava) { 
+                scene.background.setHex(0xff3300);
+                if (window.shadowsEnabled) {
+                    scene.fog.color.setHex(0xee2200);
+                    scene.fog.density = 0.22;
+                } else {
+                    scene.fog.color.setHex(0xff3300);
+                    scene.fog.near = 0.1; scene.fog.far = 5; 
+                }
+            }
+            else { 
+                if (currentDimension === 'overworld') { 
+                    if (sunHeight > 0.2) { 
+                        skyCurrent.copy(skyColors.overworld); 
+                        ambientLight.intensity = 0.6; 
+                        directionalLight.intensity = 0.8; 
+                    } else if (sunHeight > 0) { 
+                        const t = sunHeight / 0.2; 
+                        skyCurrent.copy(skyColors.dusk).lerp(skyColors.overworld, t); 
+                        ambientLight.intensity = 0.2 + 0.4 * t; 
+                        directionalLight.intensity = 0.8 * t; 
+                    } else if (sunHeight > -0.2) { 
+                        const t = (sunHeight + 0.2) / 0.2; 
+                        skyCurrent.copy(skyColors.night).lerp(skyColors.dusk, t); 
+                        ambientLight.intensity = 0.1 + 0.1 * t; 
+                        directionalLight.intensity = 0; 
+                    } else { 
+                        skyCurrent.copy(skyColors.night); 
+                        ambientLight.intensity = 0.1; 
+                        directionalLight.intensity = 0; 
+                    } 
+                    
+                    const camY = camera.position.y; 
+                    const targetColor = skyCurrent.clone(); 
+                    if (camY < 0) { 
+                        const depthFactor = Math.min(1, -camY / 30); 
+                        targetColor.lerp(new THREE.Color(0x020202), depthFactor); 
+                        if (window.shadowsEnabled) {
+                            scene.fog.color.copy(targetColor);
+                            scene.fog.density = 0.015 + 0.05 * depthFactor;
+                        } else {
+                            scene.fog.near = 20 - 15 * depthFactor; 
+                            scene.fog.far = 50 - 30 * depthFactor; 
+                        }
+                    } else { 
+                        if (window.shadowsEnabled) {
+                            scene.fog.color.copy(targetColor);
+                            scene.fog.density = sunHeight <= 0.1 ? 0.012 : 0.007; // 稍微增加夜晚的雾气，凸显路灯火把氛围
+                        } else {
+                            scene.fog.near = 40; 
+                            scene.fog.far = 80; 
+                        }
+                    } 
+                    scene.background = targetColor; 
+                    if (!window.shadowsEnabled) scene.fog.color = targetColor; 
+                } else if (currentDimension === 'nether') {
+                    if (window.shadowsEnabled) {
+                        scene.fog.color.copy(skyColors.nether);
+                        scene.fog.density = 0.035;
+                    }
+                } else if (currentDimension === 'end') {
+                    if (window.shadowsEnabled) {
+                        scene.fog.color.copy(skyColors.end);
+                        scene.fog.density = 0.008;
+                    }
+                }
+            }
 
             const dt = Math.min(delta, 0.05);
             if (playerInvulnTimer > 0) playerInvulnTimer -= dt;
@@ -204,7 +279,7 @@
                 const curBx = Math.floor(camObj.position.x); const curBy = Math.floor(camObj.position.y - 1); const curBz = Math.floor(camObj.position.z); const blockInside = getBlock(curBx, curBy, curBz) || getBlock(curBx, Math.floor(camObj.position.y), curBz);
                 if (blockInside === 'nether_portal') { portalTimer += dt; document.getElementById('portal-overlay').style.opacity = portalTimer / 3.0; if (portalTimer >= 3.0) { portalTimer = 0; document.getElementById('portal-overlay').style.opacity = 0; switchDimension(currentDimension === 'overworld' ? 'nether' : 'overworld'); } }
                 else if (blockInside === 'end_portal') { portalTimer = 0; document.getElementById('portal-overlay').style.opacity = 0; switchDimension('end'); }
-                else if (blockInside === 'return_portal') { if (!isGameClear) { isGameClear = true; controls.unlock(); document.getElementById('win-screen').style.display = 'flex'; let scroll = 0; const credits = document.getElementById('credits-content'); winScroller = setInterval(() => { scroll += 1; credits.style.transform = `translateY(-${scroll}px)`; if (scroll > 1500) clearInterval(winScroller); }, 50); } }
+                else if (blockInside === 'return_portal') { if (!isGameClear) { isGameClear = true; if (window.awardAchievement) window.awardAchievement('free_the_end'); controls.unlock(); document.getElementById('win-screen').style.display = 'flex'; let scroll = 0; const credits = document.getElementById('credits-content'); winScroller = setInterval(() => { scroll += 1; credits.style.transform = `translateY(-${scroll}px)`; if (scroll > 1500) clearInterval(winScroller); }, 50); } }
                 else { portalTimer = 0; document.getElementById('portal-overlay').style.opacity = 0; }
                 if (actionTimer > 0) { actionTimer -= dt; if (actionType === 'swing') { const p = 1 - (actionTimer / 0.3); heldItemGroup.rotation.x = Math.sin(p * Math.PI) * -1; heldItemGroup.position.y = -0.4 + Math.sin(p * Math.PI) * 0.2; } else if (actionType === 'eat') { const p = 1 - (actionTimer / 0.5); heldItemGroup.position.x = 0.4 - Math.sin(p * Math.PI) * 0.3; heldItemGroup.position.y = -0.4 + Math.sin(p * Math.PI * 6) * 0.1; heldItemGroup.rotation.z = Math.sin(p * Math.PI) * -0.5; } if (actionTimer <= 0) { heldItemGroup.rotation.set(0, 0, 0); heldItemGroup.position.set(0.4, -0.4, -0.6); if (actionType === 'swing' && isMining) actionTimer = 0.3; } }
                 else { if (velocity.length() > 1 && canJump && !isFlying) { heldItemGroup.position.y = -0.4 + Math.sin(worldTime * 12) * 0.03; heldItemGroup.position.x = 0.4 + Math.cos(worldTime * 6) * 0.01; } else { heldItemGroup.position.set(0.4, -0.4, -0.6); } heldItemGroup.rotation.set(0, 0, 0); }
@@ -271,6 +346,11 @@
                             if (miningTime >= requiredTime) { 
                                 let drops = false; if (blockDef.tool === 'none' || (toolDef && toolDef.toolType === blockDef.tool && toolDef.tier >= blockDef.tier)) drops = true; 
                                 setBlock(bx, by, bz, null); 
+                                if (window.awardAchievement) {
+                                    if (blockType === 'stone') window.awardAchievement('stone_age');
+                                    else if (blockType === 'log') window.awardAchievement('getting_wood');
+                                    else if (blockType === 'diamond_ore') window.awardAchievement('diamonds');
+                                }
                                 if (blockType === 'bed_head' || blockType === 'bed_foot') { const targetType = blockType === 'bed_head' ? 'bed_foot' : 'bed_head'; const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]; for (let d of dirs) { if (getBlock(bx + d[0], by, bz + d[1]) === targetType) { setBlock(bx + d[0], by, bz + d[1], null); break; } } }
                                 if (blockType === 'door_top' || blockType === 'door_top_open') { const other = getBlock(bx, by - 1, bz); if (other === 'door_bottom' || other === 'door_bottom_open') setBlock(bx, by - 1, bz, null); }
                                 else if (blockType === 'door_bottom' || blockType === 'door_bottom_open') { const other = getBlock(bx, by + 1, bz); if (other === 'door_top' || other === 'door_top_open') setBlock(bx, by + 1, bz, null); }
@@ -321,9 +401,34 @@
                 if (p.anim && p.anim.punch && p.mesh.arms[0]) { p.mesh.arms[0].rotation.x = -Math.PI / 2 + Math.sin(time * 2) * 0.2; }
             });
 
-            renderer.render(scene, camera);
+            // 核心光影黑科技：动态流动逼真水波纹偏移效果
+            if (window.shadowsEnabled && typeof materials !== 'undefined' && materials.water) {
+                const elapsed = performance.now() * 0.001;
+                if (materials.water.normalMap) {
+                    materials.water.normalMap.offset.x = (elapsed * 0.02) % 1.0;
+                    materials.water.normalMap.offset.y = (elapsed * 0.015) % 1.0;
+                }
+                if (materials.water.map) {
+                    materials.water.map.offset.x = (elapsed * 0.012) % 1.0;
+                    materials.water.map.offset.y = (elapsed * 0.01) % 1.0;
+                }
+            }
+
+            // 执行渲染或 HDR Bloom 后处理通道渲染
+            if (window.shadowsEnabled && window.composer) {
+                window.composer.render();
+            } else {
+                renderer.render(scene, camera);
+            }
         }
 
-        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+        window.addEventListener('resize', () => { 
+            camera.aspect = window.innerWidth / window.innerHeight; 
+            camera.updateProjectionMatrix(); 
+            renderer.setSize(window.innerWidth, window.innerHeight); 
+            if (window.composer) {
+                window.composer.setSize(window.innerWidth, window.innerHeight);
+            }
+        });
         window.addEventListener('beforeunload', () => { if (isPlaying && typeof saveGame === 'function') saveGame(); });
         animate();
