@@ -2,12 +2,14 @@
         window.liquidQueue = new Set();
         window.liquidTimer = 0;
         window.waterDistances = new Map();
+        window.lavaDistances = new Map();
         
         const dimensionState = {
             overworld: { chunks: new Map(), worldBlocks: new Set(), entities: [], playerPos: null },
             nether: { chunks: new Map(), worldBlocks: new Set(), entities: [], playerPos: null },
             end: { chunks: new Map(), worldBlocks: new Set(), entities: [], playerPos: null }
         };
+        window.dimensionState = dimensionState;
 
         var currentDimension = 'overworld';
         var chunks = dimensionState.overworld.chunks; 
@@ -40,7 +42,11 @@
         var spawnPoint = null;
         
         var heldItemGroup = new THREE.Group(); heldItemGroup.position.set(0.4, -0.4, -0.6); camera.add(heldItemGroup); scene.add(camera);
-        var renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setSize(window.innerWidth, window.innerHeight); renderer.setPixelRatio(window.devicePixelRatio); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15; document.body.appendChild(renderer.domElement);
+        var renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setSize(window.innerWidth, window.innerHeight); renderer.setPixelRatio(window.devicePixelRatio);
+        // When "超强光影" is off, fully disable shadow map work.
+        renderer.shadowMap.enabled = !!window.shadowsEnabled;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15; document.body.appendChild(renderer.domElement);
 
         // 核心光影黑科技：超强光影下开启高动态光照辉光（HDR Bloom）后处理流程
         var composer = null;
@@ -90,12 +96,43 @@
 
         function getBlock(x, y, z) {
             const cx = Math.floor(x / chunkSize); const cz = Math.floor(z / chunkSize);
-            const chunk = chunks.get(`${cx},${cz}`); if (!chunk) return null; return chunk.blocks.get(`${x},${y},${z}`);
+            const chunk = chunks.get(`${cx},${cz}`); if (!chunk) return null;
+            const type = chunk.blocks.get(`${x},${y},${z}`);
+            if (!type) return null;
+            if (type.endsWith('_north')) return type.slice(0, -6);
+            if (type.endsWith('_south')) return type.slice(0, -6);
+            if (type.endsWith('_east')) return type.slice(0, -5);
+            if (type.endsWith('_west')) return type.slice(0, -5);
+            return type;
         }
 
+        function getFullBlock(x, y, z) {
+            const cx = Math.floor(x / chunkSize); const cz = Math.floor(z / chunkSize);
+            const chunk = chunks.get(`${cx},${cz}`); if (!chunk) return null; return chunk.blocks.get(`${x},${y},${z}`);
+        }
+        window.getBlock = getBlock;
+        window.getFullBlock = getFullBlock;
+
         function setBlock(x, y, z, type, fromNetwork = false, targetDim = currentDimension) {
+            if (type && window.canUseItemType && !window.canUseItemType(type)) return false;
+            const oldFullType = getFullBlock(x, y, z);
+            const oldType = oldFullType && window.getBaseType ? window.getBaseType(oldFullType) : oldFullType;
+            const baseType = type && window.getBaseType ? window.getBaseType(type) : type;
             const cx = Math.floor(x / chunkSize); const cz = Math.floor(z / chunkSize);
             const key = `${x},${y},${z}`;
+            
+            if (window.isPlaying && targetDim === currentDimension && oldFullType !== type) {
+                if (type === null) {
+                    if (oldType && oldType !== 'water' && oldType !== 'lava') {
+                        window.playBlockSound(oldType, 'dig');
+                    }
+                } else {
+                    if (baseType !== 'water' && baseType !== 'lava') {
+                        window.playBlockSound(baseType, 'step');
+                    }
+                }
+            }
+
             modifiedBlocks[targetDim][key] = type === null ? 'null' : type;
             if (targetDim === currentDimension) {
                 const chunk = chunks.get(`${cx},${cz}`);
@@ -104,7 +141,7 @@
                     else { 
                         chunk.blocks.set(key, type); 
                         const nonSolid = ['water', 'lava', 'tall_grass', 'end_portal_frame_empty', 'torch', 'end_rod', 'door_top_open', 'door_bottom_open'];
-                        if (!nonSolid.includes(type)) worldBlocks.add(key); 
+                        if (!nonSolid.includes(baseType)) worldBlocks.add(key); 
                     }
                     rebuildChunkMesh(chunk);
 
@@ -117,18 +154,19 @@
                     if (localZ === chunkSize - 1) { const n = chunks.get(`${cx},${cz+1}`); if (n) rebuildChunkMesh(n); }
 
                     // Liquid update trigger
-                    if (type === 'water') {
+                    if (type === 'water' || type === 'lava') {
                         window.liquidQueue.add(key);
-                        if (!fromNetwork && !window.waterDistances.has(key)) {
-                            // Player placed a source block
-                            window.waterDistances.set(key, 0);
+                        const distMap = type === 'lava' ? window.lavaDistances : window.waterDistances;
+                        if (!fromNetwork && !distMap.has(key)) {
+                            distMap.set(key, 0);
                         }
                     } else if (type === null) {
-                        // Notify neighbors to flow if they are water
+                        // Notify neighboring liquids to flow into newly opened space.
                         const dirs = [[0,1,0], [0,-1,0], [1,0,0], [-1,0,0], [0,0,1], [0,0,-1]];
                         dirs.forEach(d => {
                             const nx = x + d[0], ny = y + d[1], nz = z + d[2];
-                            if (getBlock(nx, ny, nz) === 'water') window.liquidQueue.add(`${nx},${ny},${nz}`);
+                            const neighborType = getBlock(nx, ny, nz);
+                            if (neighborType === 'water' || neighborType === 'lava') window.liquidQueue.add(`${nx},${ny},${nz}`);
                         });
                     }
                 }

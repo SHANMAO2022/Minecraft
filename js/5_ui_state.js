@@ -24,15 +24,20 @@
         window.addXP = addXP;
 
         var updateStatusUI = function() {
+            const hudIcon = (type) => `<span class="hud-icon hud-${type}"></span>`;
             let healthHtml = '';
             for (let i = 0; i < 10; i++) {
                 let h = currentHealth - i * 2;
-                if (h >= 2) healthHtml += '❤️';
-                else if (h === 1) healthHtml += '💔';
-                else healthHtml += '🖤';
+                if (h >= 2) healthHtml += hudIcon('heart-full');
+                else if (h > 0) healthHtml += hudIcon('heart-half');
+                else healthHtml += hudIcon('heart-empty');
             }
             healthBarEl.innerHTML = healthHtml;
-            hungerBarEl.innerHTML = ''; for (let i = 0; i < 10; i++) hungerBarEl.innerHTML += (i >= 10 - Math.ceil(currentHunger / 2)) ? '🍗' : '🦴';
+            hungerBarEl.innerHTML = '';
+            for (let i = 0; i < 10; i++) {
+                const food = currentHunger - (9 - i) * 2;
+                hungerBarEl.innerHTML += food >= 2 ? hudIcon('food-full') : (food > 0 ? hudIcon('food-half') : hudIcon('food-empty'));
+            }
             
             // 计算护甲值
             let totalArmorValue = 0;
@@ -42,11 +47,11 @@
             armorBarEl.innerHTML = ''; 
             if (totalArmorValue > 0) {
                 let armorHtml = "";
-                let fullIcons = Math.floor(totalArmorValue / 2);
-                let halfIcon = totalArmorValue % 2;
-                for (let i = 0; i < fullIcons; i++) armorHtml += "🥼";
-                if (halfIcon) armorHtml += "👟";
-                armorBarEl.innerText = armorHtml;
+                for (let i = 0; i < 10; i++) {
+                    const armor = totalArmorValue - i * 2;
+                    armorHtml += armor >= 2 ? hudIcon('armor-full') : (armor > 0 ? hudIcon('armor-half') : hudIcon('armor-empty'));
+                }
+                armorBarEl.innerHTML = armorHtml;
                 armorBarEl.style.display = 'flex';
             } else {
                 armorBarEl.style.display = 'none';
@@ -66,14 +71,14 @@
                 console.log(`XP Update: ${window.currentXP}/${100 + window.currentLevel * 50} (Lvl ${window.currentLevel})`);
             }
 
-            document.getElementById('status-bars').style.opacity = (gameMode === 0) ? '0' : '1';
+            document.getElementById('status-bars').style.opacity = (gameMode === 0 || gameMode === 2) ? '0' : '1';
         };
         window.updateStatusUI = updateStatusUI;
 
 
 
         function takeDamage(amount) {
-            if (isDead || playerInvulnTimer > 0 || gameMode === 0) return;
+            if (isDead || playerInvulnTimer > 0 || gameMode === 0 || gameMode === 2) return;
             
             // 护甲减免 (每 1 点 ArmorValue 减免约 4%，最高 20 点减免 80%)
             let totalArmorValue = 0;

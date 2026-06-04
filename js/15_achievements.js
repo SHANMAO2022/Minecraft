@@ -18,6 +18,18 @@
             x: 50,
             y: 130
         },
+        sweet_dreams: {
+            id: 'sweet_dreams',
+            tab: 'story',
+            title: '甜蜜的梦',
+            description: '在床上睡一觉以度过夜晚，并设置新重生点。',
+            hint: '达成方式：在夜间右键点击放置的床进行睡觉。',
+            icon: 'bed',
+            points: 20,
+            parent: 'benchmarking',
+            x: 200,
+            y: 250
+        },
         upgrade_pickaxe: {
             id: 'upgrade_pickaxe',
             tab: 'story',
@@ -145,7 +157,7 @@
             const ctx = new (window.AudioContext || window.webkitAudioContext)();
             const now = ctx.currentTime;
             
-            const playTone = (freq, start, duration, vol = 0.15) => {
+            const playTone = (freq, start, duration, vol = 0.34) => {
                 const osc = ctx.createOscillator();
                 const gainNode = ctx.createGain();
                 osc.connect(gainNode);
@@ -166,7 +178,7 @@
             playTone(523.25, now, 0.4);       // C5
             playTone(659.25, now + 0.08, 0.4); // E5
             playTone(783.99, now + 0.16, 0.4); // G5
-            playTone(1046.50, now + 0.24, 0.6, 0.2); // C6
+            playTone(1046.50, now + 0.24, 0.6, 0.45); // C6
         } catch (e) {
             console.warn("AudioContext failed", e);
         }
@@ -185,7 +197,7 @@
         const isChallenge = ach.frame === 'challenge';
         toast.className = `achievement-toast-item ${isChallenge ? 'toast-challenge' : ''}`;
         
-        const iconUrl = (window.icons && window.icons[ach.icon]) ? window.icons[ach.icon] : 'textures/' + ach.icon + '.png';
+        const iconUrl = (window.icons && window.icons[ach.icon]) ? window.icons[ach.icon] : (window.getTextureSource ? window.getTextureSource(ach.icon) : 'textures/' + ach.icon + '.png');
 
         toast.innerHTML = `
             <div class="ach-toast-icon" style="background-image: url('${iconUrl}')"></div>
@@ -279,7 +291,7 @@
             document.body.appendChild(detailModal);
         }
 
-        const iconUrl = (window.icons && window.icons[ach.icon]) ? window.icons[ach.icon] : 'textures/' + ach.icon + '.png';
+        const iconUrl = (window.icons && window.icons[ach.icon]) ? window.icons[ach.icon] : (window.getTextureSource ? window.getTextureSource(ach.icon) : 'textures/' + ach.icon + '.png');
 
         detailModal.innerHTML = `
             <div class="ach-modal-backdrop"></div>
@@ -430,7 +442,7 @@
             node.style.left = ach.x + 'px';
             node.style.top = ach.y + 'px';
 
-            const iconUrl = (window.icons && window.icons[ach.icon]) ? window.icons[ach.icon] : 'textures/' + ach.icon + '.png';
+            const iconUrl = (window.icons && window.icons[ach.icon]) ? window.icons[ach.icon] : (window.getTextureSource ? window.getTextureSource(ach.icon) : 'textures/' + ach.icon + '.png');
 
             node.innerHTML = `
                 <div class="ach-node-icon" style="background-image: url('${iconUrl}')"></div>

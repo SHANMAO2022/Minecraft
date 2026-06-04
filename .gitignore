@@ -11,3 +11,10 @@ __pycache__/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Local testing and helper artifacts
+.chrome-*/
+scratch/
+get_lines.py
+replace_script.py
+*.exe

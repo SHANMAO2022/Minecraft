@@ -119,7 +119,8 @@
             function seededRandom() { let x = Math.sin(currentSeed++) * 10000; return x - Math.floor(x); }
             noise2D = createNoise2D(seededRandom);
             noise3D = createNoise3D(seededRandom);
-            biomeNoise = createNoise2D(() => { let x = Math.sin(window.mcSeed + 0.123) * 10000; return x - Math.floor(x); });
+            let biomeSeed = window.mcSeed + 0.123;
+            biomeNoise = createNoise2D(() => { let x = Math.sin(biomeSeed++) * 10000; return x - Math.floor(x); });
         }
         initNoise();
 
@@ -144,23 +145,23 @@
             if (bv < 0.35) return { name: '沙漠', hMult: 0.6, hBase: 1, top: 'sand', sub: 'sand' };
             if (bv < 0.42) return { name: '红砂荒漠', hMult: 1.2, hBase: 3, top: 'sand', sub: 'stone' };
             if (bv < 0.46) return { name: '河流', hMult: 0.3, hBase: -4, top: 'dirt', sub: 'dirt' };
-            if (bv < 0.52) return { name: '沼泽', hMult: 0.4, hBase: 0.5, top: 'swamp_grass', sub: 'dirt' };
-            if (bv < 0.65) return { name: '平原', hMult: 0.8, hBase: 0, top: 'grass', sub: 'dirt' };
-            if (bv < 0.72) return { name: '向日葵平原', hMult: 0.7, hBase: 1, top: 'grass', sub: 'dirt' };
-            if (bv < 0.78) return { name: '桦木林', hMult: 1.1, hBase: 2, top: 'grass', sub: 'dirt' };
-            if (bv < 0.84) return { name: '树林', hMult: 1.2, hBase: 2, top: 'grass', sub: 'dirt' };
+            if (bv < 0.70) return { name: '平原', hMult: 0.8, hBase: 0, top: 'grass', sub: 'dirt' };
+            if (bv < 0.75) return { name: '向日葵平原', hMult: 0.7, hBase: 1, top: 'grass', sub: 'dirt' };
+            if (bv < 0.80) return { name: '桦木林', hMult: 1.1, hBase: 2, top: 'grass', sub: 'dirt' };
+            if (bv < 0.85) return { name: '树林', hMult: 1.2, hBase: 2, top: 'grass', sub: 'dirt' };
             if (bv < 0.90) return { name: '针叶林', hMult: 1.4, hBase: 3, top: 'grass', sub: 'dirt' };
             if (bv < 0.95) return { name: '丛林', hMult: 1.6, hBase: 4, top: 'grass', sub: 'dirt' };
             if (bv < 0.98) return { name: '高山', hMult: 2.5, hBase: 12, top: 'stone', sub: 'stone' };
             return { name: '雪山', hMult: 3.0, hBase: 16, top: 'snow', sub: 'stone' };
         };
+        window.isPlainBiome = (biome) => !!biome && (biome.name === '平原' || biome.name === '向日葵平原');
 
         window.modifiedBlocks = { overworld: {}, nether: {}, end: {} };
 
         const chunkSize = 16;
         let playerInvulnTimer = 0; let gameStartTime = 0; let isSpawnImmunity = true; let highestY = 20; let isFalling = false;
         let actionType = ''; let actionTimer = 0; let hungerTimer = 0; let healTimer = 0; let starveTimer = 0; let isGameClear = false; let winScroller = null;
-        let jumpPressed = false; let shiftPressed = false; let gameMode = 1; let isFlying = false; let isChatOpen = false; let lastSpacePress = 0; let craftingMode = 2;
+        let jumpPressed = false; let shiftPressed = false; let sprintEnabled = false; let gameMode = 1; let isFlying = false; let isChatOpen = false; let lastSpacePress = 0; let craftingMode = 2;
 
     window.isPlaying = false;
     window.currentXP = 0; window.currentLevel = 0;
@@ -168,6 +169,7 @@
 
     window.furnaceStates = {};
     window.dimensionState = { overworld: { chunks: new Map(), worldBlocks: new Set(), entities: [] }, nether: { chunks: new Map(), worldBlocks: new Set(), entities: [] }, end: { chunks: new Map(), worldBlocks: new Set(), entities: [] } };
+    window.update100Enabled = true;
     window.waterQuality = 0; // 0: Low, 1: High
     window.updateWaterQuality = function(val) {
         window.waterQuality = val;
@@ -266,12 +268,13 @@
             for (let dim in content.mods) {
                 const targetDim = dimMap[dim];
                 for (let pos in content.mods[dim]) {
-                    const type = content.mods[dim][pos];
+                    let type = content.mods[dim][pos];
                     if (type === 'null') {
                         compressedMods[targetDim][pos] = -1; // -1 代表空气/破坏
                     } else {
                         const id = blockTypes.indexOf(type);
                         if (id !== -1) compressedMods[targetDim][pos] = id;
+                        else compressedMods[targetDim][pos] = type;
                     }
                 }
             }
@@ -283,7 +286,9 @@
                 p: content.player,
                 c: content.chests,
                 f: content.furnaces,
-                meta: content.metadata
+                meta: content.metadata,
+                a: content.achievements,
+                u: !!content.update100
             };
 
             // 保存到本地（备用）
@@ -345,20 +350,25 @@
                     const id = data.m[dimKey][pos];
                     if (id === -1) {
                         decompressedMods[targetDim][pos] = 'null';
+                    } else if (typeof id === 'string') {
+                        decompressedMods[targetDim][pos] = id;
                     } else {
                         decompressedMods[targetDim][pos] = blockTypes[id];
                     }
                 }
             }
 
-            return {
+            const unoptimizedData = {
+                metadata: data.meta,
                 seed: data.s,
                 mods: decompressedMods,
                 player: data.p,
-                chests: data.c,
-                furnaces: data.f,
-                metadata: data.meta
+                chests: data.c || {},
+                furnaces: data.f || {},
+                achievements: data.a || {},
+                update100: !!(data.u !== undefined ? data.u : data.update100)
             };
+            return unoptimizedData;
         } catch (e) {
             console.error("Load failed:", e);
             return null;
@@ -404,3 +414,97 @@ window.addEventListener('mouseup', (e) => { if (e.button === 0) window.isLeftMou
 window.addEventListener('blur', () => { window.isLeftMouseDown = false; });
 
 window.creativeBreakTimer = 0;
+
+        window.blockSoundPools = window.blockSoundPools || {};
+
+        const effectAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const boostedEffectAudio = new WeakMap();
+
+        function prepareBoostedEffectAudio(audio, volume, boost = 2.4) {
+            audio.volume = Math.min(1, volume);
+            try {
+                let gainNode = boostedEffectAudio.get(audio);
+                if (!gainNode) {
+                    const sourceNode = effectAudioContext.createMediaElementSource(audio);
+                    gainNode = effectAudioContext.createGain();
+                    gainNode.gain.value = boost;
+                    sourceNode.connect(gainNode);
+                    gainNode.connect(effectAudioContext.destination);
+                    boostedEffectAudio.set(audio, gainNode);
+                } else {
+                    gainNode.gain.value = boost;
+                }
+                if (effectAudioContext.state === 'suspended') effectAudioContext.resume().catch(() => {});
+            } catch {}
+            return audio;
+        }
+        window.prepareBoostedEffectAudio = prepareBoostedEffectAudio;
+
+        function playBlockSound(blockType, action) {
+            let base = window.getBaseType ? window.getBaseType(blockType) : blockType;
+            if (!base) return;
+            base = base.replace(/_(inner|outer)_(left|right)$/, '');
+
+            let category = 'stone'; // default
+            
+            const woodTypes = ['planks', 'log', 'crafting_table', 'oak_slab', 'oak_stairs', 'oak_fence', 'oak_fence_gate', 'oak_fence_gate_open', 'door', 'door_top', 'door_bottom', 'door_top_open', 'door_bottom_open', 'bed', 'bed_head', 'bed_foot'];
+            const grassTypes = ['grass', 'leaves', 'tall_grass', 'lily_pad'];
+            const sandTypes = ['sand'];
+            const gravelTypes = ['gravel'];
+            const snowTypes = ['snow', 'ice'];
+
+            if (woodTypes.includes(base) || base.startsWith('oak_stairs') || base.startsWith('door')) {
+                category = 'wood';
+            } else if (grassTypes.includes(base) || base.includes('leaves')) {
+                category = 'grass';
+            } else if (sandTypes.includes(base)) {
+                category = 'sand';
+            } else if (gravelTypes.includes(base)) {
+                category = 'gravel';
+            } else if (snowTypes.includes(base)) {
+                category = 'snow';
+            }
+
+            let maxIndex = 4;
+            if (action === 'step') {
+                if (['grass', 'stone', 'wood'].includes(category)) maxIndex = 6;
+                else if (category === 'sand') maxIndex = 5;
+            }
+
+            const randIndex = Math.floor(Math.random() * maxIndex) + 1;
+            const path = `sounds/${action}/${category}${randIndex}.ogg`;
+            
+            try {
+                if (!window.blockSoundPools[path]) {
+                    window.blockSoundPools[path] = [];
+                }
+                const pool = window.blockSoundPools[path];
+                
+                // Find an idle Audio element
+                let audio = pool.find(a => a.paused || a.ended);
+                if (!audio) {
+                    if (pool.length < 5) {
+                        audio = new Audio(path);
+                        audio.preload = 'auto';
+                        pool.push(audio);
+                    } else {
+                        // Reuse the oldest active element in the pool (circular queue)
+                        audio = pool[0];
+                        pool.push(pool.shift());
+                        try {
+                            audio.currentTime = 0;
+                        } catch (e) {}
+                    }
+                }
+                
+                prepareBoostedEffectAudio(audio, action === 'step' ? 0.3 : 0.68);
+                const playPromise = audio.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(e => {
+                        // Force manual resource load if browser blocks/stalls
+                        audio.load();
+                    });
+                }
+            } catch (e) {}
+        }
+        window.playBlockSound = playBlockSound;

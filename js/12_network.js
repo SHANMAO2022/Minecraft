@@ -77,7 +77,12 @@ function handleNetworkData(data, senderId) {
         window.furnaceStates = data.furnaces || {};
         
         // 重载所有区块
-        chunks.forEach(c => blockTypes.forEach(t => scene.remove(c.meshes[t])));
+        chunks.forEach(c => {
+            for (const t in c.meshes) {
+                scene.remove(c.meshes[t]);
+                c.meshes[t].dispose();
+            }
+        });
         chunks.clear();
         worldBlocks.clear();
         lastChunkX = -999;
@@ -88,6 +93,8 @@ function handleNetworkData(data, senderId) {
         appendChat(data.name + ": " + data.message);
     } else if (data.type === 'mobs') {
         if (currentDimension !== data.dim) return;
+        const now = performance.now();
+        const seenMobIds = new Set(data.mobs.map(m => m.id));
         
         // 更新本地实体
         data.mobs.forEach(m => {
@@ -104,6 +111,9 @@ function handleNetworkData(data, senderId) {
                 if (localMob) localMob.id = m.id;
             }
             if (localMob) {
+                localMob.networkControlled = true;
+                localMob.lastNetworkSeen = now;
+                localMob.persistent = true;
                 localMob.mesh.position.set(m.pos[0], m.pos[1], m.pos[2]);
                 if (localMob.mesh.rotation) localMob.mesh.rotation.y = m.rot;
                 localMob.hp = m.hp;
@@ -114,7 +124,7 @@ function handleNetworkData(data, senderId) {
         for (let i = entities.length - 1; i >= 0; i--) {
             const e = entities[i];
             if (['pig', 'cow', 'zombie', 'spider', 'blaze', 'enderman'].includes(e.type)) {
-                if (!data.mobs.find(m => m.id === e.id)) {
+                if (e.networkControlled && !seenMobIds.has(e.id) && now - (e.lastNetworkSeen || 0) > 5000) {
                     scene.remove(e.mesh);
                     entities.splice(i, 1);
                 }
@@ -172,19 +182,6 @@ document.getElementById('btn-save-quit').addEventListener('click', async () => {
     isPlaying = false; 
     pauseScreen.style.display = 'none'; 
     titleScreen.style.display = 'flex';
-    // 回到标题界面后弹出提示
-    document.getElementById('save-confirm-modal').style.display = 'flex';
-});
-
-document.getElementById('btn-modal-download').addEventListener('click', async () => {
-    if (window.currentWorldName) {
-        await exportWorld(window.currentWorldName);
-        document.getElementById('save-confirm-modal').style.display = 'none';
-    }
-});
-
-document.getElementById('btn-modal-quit').addEventListener('click', () => {
-    document.getElementById('save-confirm-modal').style.display = 'none';
 });
 
 document.getElementById('btn-options-title').addEventListener('click', () => { titleScreen.style.display = 'none'; document.getElementById('options-screen').style.display = 'flex'; document.getElementById('player-name-input').value = localStorage.getItem('mc_playerName') || 'Player'; });

@@ -21,12 +21,53 @@
             window.chestInventories[key] = inv;
         };
 
+        function clearChunkTorchLights(chunk) {
+            if (!chunk) return;
+            if (chunk.torchLights) {
+                chunk.torchLights.forEach(light => scene.remove(light));
+                chunk.torchLights.length = 0;
+            } else {
+                chunk.torchLights = [];
+            }
+            chunk._torchLightSig = null;
+        }
+
+        function rebuildChunkTorchLights(chunk) {
+            if (!chunk || !chunk.blocks) return;
+            const torchPosKeys = [];
+            for (const [posKey, type] of chunk.blocks.entries()) {
+                if (type === 'torch') torchPosKeys.push(posKey);
+            }
+            const signature = torchPosKeys.join('|');
+            if (chunk._torchLightSig === signature && chunk.torchLights) return;
+            clearChunkTorchLights(chunk);
+            chunk.torchLights = [];
+            chunk._torchLightSig = signature;
+            for (const posKey of torchPosKeys) {
+                const [bx, by, bz] = posKey.split(',').map(Number);
+                // p19: double torch lighting reach.
+                const light = new THREE.PointLight(0xffc46b, 3.1, 111.0, 1.7);
+                light.position.set(bx + 0.5, by + 0.72, bz + 0.5);
+                light.castShadow = false;
+                chunk.torchLights.push(light);
+                scene.add(light);
+            }
+        }
+        window.clearChunkTorchLights = clearChunkTorchLights;
+
         function switchDimension(newDim) {
             dimensionState[currentDimension].playerPos = camera.position.clone();
-            chunks.forEach(c => { for (let t in c.meshes) scene.remove(c.meshes[t]); });
+            chunks.forEach(c => {
+                for (let t in c.meshes) scene.remove(c.meshes[t]);
+                if (c.torchLights) c.torchLights.forEach(light => scene.remove(light));
+            });
             entities.forEach(e => { scene.remove(e.mesh); if (e.beam) scene.remove(e.beam); }); particles.forEach(p => scene.remove(p.mesh)); particles.length = 0;
             currentDimension = newDim; chunks = dimensionState[newDim].chunks; worldBlocks = dimensionState[newDim].worldBlocks; entities = dimensionState[newDim].entities;
-            chunks.forEach(c => { for (let t in c.meshes) scene.add(c.meshes[t]); }); entities.forEach(e => { scene.add(e.mesh); if (e.beam) scene.add(e.beam); });
+            chunks.forEach(c => {
+                for (let t in c.meshes) scene.add(c.meshes[t]);
+                if (c.torchLights) c.torchLights.forEach(light => scene.add(light));
+            });
+            entities.forEach(e => { scene.add(e.mesh); if (e.beam) scene.add(e.beam); });
             document.getElementById('biome-display').innerText = `Biome: ${newDim.charAt(0).toUpperCase() + newDim.slice(1)}`;
             if (newDim === 'overworld') { 
                 scene.background = skyColors.overworld; 
@@ -69,6 +110,7 @@
                 ambientLight.intensity = 0.4; 
                 directionalLight.intensity = 0.2; 
                 if (entities.filter(e => e.type === 'dragon').length === 0 && !isGameClear) setTimeout(() => spawnEnderDragon(), 2000); 
+                if (typeof generateEmptyReturnPortal === 'function') setTimeout(() => generateEmptyReturnPortal(), 1000);
             }
             
             if (dimensionState[newDim].playerPos && (newDim !== 'nether' || dimensionState[newDim].playerPos.y > 15)) {
@@ -107,6 +149,378 @@
             lastChunkX = -999; updateChunks(); velocity.set(0, 0, 0);
         }
 
+        function hash2i(a, b, seed) {
+            const s = Math.sin(a * 127.1 + b * 311.7 + seed * 74.7) * 43758.5453123;
+            return s - Math.floor(s);
+        }
+
+        function getSurfaceYAt(wx, wz) {
+            const biome = window.getBiome(wx, wz);
+            return Math.floor(noise2D(wx * 0.04, wz * 0.04) * 6 * biome.hMult + biome.hBase);
+        }
+
+        function getFacingFromType(type) {
+            if (window.getTypeFacing) return window.getTypeFacing(type);
+            const m = type ? String(type).match(/_(north|south|east|west)$/) : null;
+            return m ? m[1] : null;
+        }
+
+        function getBedYawByFacing(facing) {
+            if (facing === 'north') return Math.PI;
+            if (facing === 'east') return -Math.PI / 2;
+            if (facing === 'west') return Math.PI / 2;
+            return 0; // south
+        }
+
+        function getDoorYawByFacing(facing) {
+            if (facing === 'east') return -Math.PI / 2;
+            if (facing === 'south') return Math.PI;
+            if (facing === 'west') return Math.PI / 2;
+            return 0; // north
+        }
+
+        function getStairYawByFacing(facing) {
+            if (facing === 'north') return Math.PI;
+            if (facing === 'east') return Math.PI / 2;
+            if (facing === 'west') return -Math.PI / 2;
+            return 0; // south
+        }
+
+        function getBlockYawByFacing(type, baseType) {
+            const facing = getFacingFromType(type);
+            if (!facing) return 0;
+            if (baseType && baseType.startsWith('door_')) return getDoorYawByFacing(facing);
+            if (baseType === 'bed' || baseType === 'bed_head' || baseType === 'bed_foot') return getBedYawByFacing(facing);
+            if (baseType && (baseType.endsWith('_stairs') || (window.isStairType && window.isStairType(baseType)))) return getStairYawByFacing(facing);
+            return getBedYawByFacing(facing);
+        }
+
+        const stairFacingDirs = {
+            north: { dx: 0, dz: -1 },
+            south: { dx: 0, dz: 1 },
+            east: { dx: 1, dz: 0 },
+            west: { dx: -1, dz: 0 }
+        };
+        function getLeftFacing(facing) {
+            return { north: 'west', west: 'south', south: 'east', east: 'north' }[facing] || 'west';
+        }
+        function getRightFacing(facing) {
+            return { north: 'east', east: 'south', south: 'west', west: 'north' }[facing] || 'east';
+        }
+        function getVillageRoofStairType(root, facing, variant) {
+            const variantType = window.getStairVariantType ? window.getStairVariantType(root, variant) : root;
+            return window.withFacing ? window.withFacing(variantType, facing) : `${variantType}_${facing}`;
+        }
+        function getVillageRoofEdgeStair(h, wx, wz) {
+            const minX = h.x - 1, maxX = h.x + h.w, minZ = h.z - 1, maxZ = h.z + h.d;
+            const north = wz === minZ, south = wz === maxZ, west = wx === minX, east = wx === maxX;
+            if (north && west) return getVillageRoofStairType('oak_stairs', 'north', 'inner_right');
+            if (north && east) return getVillageRoofStairType('oak_stairs', 'north', 'inner_left');
+            if (south && west) return getVillageRoofStairType('oak_stairs', 'south', 'inner_left');
+            if (south && east) return getVillageRoofStairType('oak_stairs', 'south', 'inner_right');
+            if (north) return getVillageRoofStairType('oak_stairs', 'north');
+            if (south) return getVillageRoofStairType('oak_stairs', 'south');
+            if (west) return getVillageRoofStairType('oak_stairs', 'west');
+            return getVillageRoofStairType('oak_stairs', 'east');
+        }
+
+        function getSpawnGuaranteedVillages() {
+            const seed = typeof window.mcSeed === 'number' ? window.mcSeed : 0;
+            if (window._spawnVillageCache && window._spawnVillageCache.seed === seed) return window._spawnVillageCache.centers;
+
+            const desiredCount = Math.floor(hash2i(11, 17, seed) * 3) + 1; // 1..3
+            const centers = [];
+            for (let i = 0; i < 96 && centers.length < desiredCount; i++) {
+                const ang = hash2i(i, 77, seed) * Math.PI * 2;
+                const dist = 500 + hash2i(i, 155, seed) * 500; // 500..1000
+                const vx = Math.round(Math.cos(ang) * dist);
+                const vz = Math.round(Math.sin(ang) * dist);
+                const biome = window.getBiome(vx, vz);
+                if (!(window.isPlainBiome ? window.isPlainBiome(biome) : (biome && biome.name === '平原'))) continue;
+                const y0 = getSurfaceYAt(vx, vz);
+                const y1 = getSurfaceYAt(vx + 12, vz);
+                const y2 = getSurfaceYAt(vx, vz + 12);
+                if (Math.max(Math.abs(y0 - y1), Math.abs(y0 - y2)) > 3) continue;
+                centers.push({ x: vx, z: vz, y: y0 });
+            }
+            // Fallback scan: aggressively search 500~1000 ring so spawn village is always found for 1.00 mode.
+            if (centers.length < desiredCount) {
+                for (let dist = 500; dist <= 1000 && centers.length < desiredCount; dist += 24) {
+                    for (let deg = 0; deg < 360 && centers.length < desiredCount; deg += 8) {
+                        const ang = (deg * Math.PI / 180) + hash2i(dist, deg, seed) * 0.07;
+                        const vx = Math.round(Math.cos(ang) * dist);
+                        const vz = Math.round(Math.sin(ang) * dist);
+                        if (centers.some(c => {
+                            const dx = c.x - vx;
+                            const dz = c.z - vz;
+                            return dx * dx + dz * dz < 140 * 140;
+                        })) continue;
+                        const biome = window.getBiome(vx, vz);
+                        if (!(window.isPlainBiome ? window.isPlainBiome(biome) : (biome && biome.name === '平原'))) continue;
+                        const y0 = getSurfaceYAt(vx, vz);
+                        const y1 = getSurfaceYAt(vx + 12, vz);
+                        const y2 = getSurfaceYAt(vx, vz + 12);
+                        if (Math.max(Math.abs(y0 - y1), Math.abs(y0 - y2)) > 3) continue;
+                        centers.push({ x: vx, z: vz, y: y0 });
+                    }
+                }
+            }
+            window._spawnVillageCache = { seed, centers };
+            return centers;
+        }
+
+        function getVillageCentersNearChunk(cx, cz) {
+            if (!window.update100Enabled || currentDimension !== 'overworld') return [];
+
+            const regionSize = 2048;
+            const minOffset = 500;
+            const maxOffset = 1000;
+            const maxLocalOffset = Math.min(maxOffset, regionSize - 1);
+
+            const wx0 = cx * chunkSize;
+            const wz0 = cz * chunkSize;
+            const minRx = Math.floor((wx0 - maxLocalOffset) / regionSize);
+            const maxRx = Math.floor((wx0 + chunkSize + maxLocalOffset) / regionSize);
+            const minRz = Math.floor((wz0 - maxLocalOffset) / regionSize);
+            const maxRz = Math.floor((wz0 + chunkSize + maxLocalOffset) / regionSize);
+
+            const out = [];
+            const seen = new Set();
+            const addCenter = (v) => {
+                const k = `${v.x},${v.z}`;
+                if (seen.has(k)) return;
+                seen.add(k);
+                out.push(v);
+            };
+            const seed = typeof window.mcSeed === 'number' ? window.mcSeed : 0;
+
+            const nearPad = 22;
+            const minX = wx0 - nearPad;
+            const maxX = wx0 + chunkSize + nearPad;
+            const minZ = wz0 - nearPad;
+            const maxZ = wz0 + chunkSize + nearPad;
+            getSpawnGuaranteedVillages().forEach(v => {
+                if (v.x >= minX && v.x <= maxX && v.z >= minZ && v.z <= maxZ) addCenter(v);
+            });
+
+            for (let rx = minRx; rx <= maxRx; rx++) {
+                for (let rz = minRz; rz <= maxRz; rz++) {
+                    const offX = Math.floor(minOffset + hash2i(rx, rz, seed) * (maxLocalOffset - minOffset));
+                    const offZ = Math.floor(minOffset + hash2i(rx + 91, rz - 37, seed) * (maxLocalOffset - minOffset));
+                    const vx = rx * regionSize + offX;
+                    const vz = rz * regionSize + offZ;
+                    const biome = window.getBiome(vx, vz);
+                    if (!(window.isPlainBiome ? window.isPlainBiome(biome) : (biome && biome.name === '平原'))) continue;
+                    const y0 = getSurfaceYAt(vx, vz);
+                    const y1 = getSurfaceYAt(vx + 12, vz);
+                    const y2 = getSurfaceYAt(vx, vz + 12);
+                    if (Math.max(Math.abs(y0 - y1), Math.abs(y0 - y2)) > 3) continue;
+                    addCenter({ x: vx, z: vz, y: y0 });
+                }
+            }
+            return out;
+        }
+
+        window.getUpdate100SpawnPos = function() {
+            if (!window.update100Enabled) return null;
+            const centers = getSpawnGuaranteedVillages();
+            if (!centers || centers.length === 0) return null;
+            const c = centers[0];
+            return { x: c.x + 0.5, y: c.y + 3.0, z: c.z + 0.5 };
+        };
+
+        function setVillageBlock(blocks, cx, cz, wx, y, wz, type) {
+            if (Math.floor(wx / chunkSize) !== cx || Math.floor(wz / chunkSize) !== cz) return;
+            const key = `${wx},${y},${wz}`;
+            if (type === null) blocks.delete(key); else blocks.set(key, type);
+        }
+
+        function applyVillageToChunk(blocks, cx, cz) {
+            if (!window.update100Enabled || currentDimension !== 'overworld') return;
+            const centers = getVillageCentersNearChunk(cx, cz);
+            if (centers.length === 0) return;
+
+            centers.forEach(center => {
+                const baseY = center.y;
+                const centerX = center.x;
+                const centerZ = center.z;
+                const houses = [
+                    { x: centerX - 11, z: centerZ - 11, w: 7, d: 7, entrance: 'south' },
+                    { x: centerX + 5, z: centerZ + 5, w: 7, d: 7, entrance: 'north' },
+                    { x: centerX - 12, z: centerZ + 6, w: 6, d: 6, entrance: 'east' }
+                ];
+                const villageBeds = [];
+
+                for (let wx = centerX - 18; wx <= centerX + 18; wx++) {
+                    for (let wz = centerZ - 18; wz <= centerZ + 18; wz++) {
+                        const rx = wx - centerX;
+                        const rz = wz - centerZ;
+                        for (let y = baseY - 4; y < baseY; y++) setVillageBlock(blocks, cx, cz, wx, y, wz, 'dirt');
+                        const isPath = Math.abs(rx) <= 2 || Math.abs(rz) <= 2;
+                        setVillageBlock(blocks, cx, cz, wx, baseY, wz, isPath ? 'cobblestone' : 'grass');
+                        for (let y = baseY + 1; y <= baseY + 7; y++) setVillageBlock(blocks, cx, cz, wx, y, wz, null);
+                    }
+                }
+
+                houses.forEach(h => {
+                    for (let wx = h.x; wx < h.x + h.w; wx++) {
+                        for (let wz = h.z; wz < h.z + h.d; wz++) {
+                            setVillageBlock(blocks, cx, cz, wx, baseY, wz, 'planks');
+                            for (let y = baseY + 1; y <= baseY + 5; y++) setVillageBlock(blocks, cx, cz, wx, y, wz, null);
+                        }
+                    }
+
+                    let doorX = Math.floor(h.x + h.w / 2);
+                    let doorZ = Math.floor(h.z + h.d / 2);
+                    let frontX = doorX;
+                    let frontZ = doorZ;
+                    if (h.entrance === 'south') { doorZ = h.z + h.d - 1; frontZ = doorZ + 1; }
+                    else if (h.entrance === 'north') { doorZ = h.z; frontZ = doorZ - 1; }
+                    else if (h.entrance === 'east') { doorX = h.x + h.w - 1; frontX = doorX + 1; }
+                    else { doorX = h.x; frontX = doorX - 1; }
+
+                    for (let wx = h.x; wx < h.x + h.w; wx++) {
+                        for (let wz = h.z; wz < h.z + h.d; wz++) {
+                            const edge = wx === h.x || wx === h.x + h.w - 1 || wz === h.z || wz === h.z + h.d - 1;
+                            if (!edge) continue;
+                            for (let y = baseY + 1; y <= baseY + 3; y++) {
+                                const isDoor = wx === doorX && wz === doorZ && y <= baseY + 2;
+                                const isWindow = y === baseY + 2 && (
+                                    ((wx === h.x || wx === h.x + h.w - 1) && wz === Math.floor(h.z + h.d / 2)) ||
+                                    ((wz === h.z || wz === h.z + h.d - 1) && wx === Math.floor(h.x + h.w / 2))
+                                );
+                                setVillageBlock(blocks, cx, cz, wx, y, wz, isDoor ? null : (isWindow ? 'glass' : 'planks'));
+                            }
+                        }
+                    }
+
+                    const doorFacing = h.entrance || 'south';
+                    const doorBottomType = window.withFacing ? window.withFacing('door_bottom', doorFacing) : `door_bottom_${doorFacing}`;
+                    const doorTopType = window.withFacing ? window.withFacing('door_top', doorFacing) : `door_top_${doorFacing}`;
+                    setVillageBlock(blocks, cx, cz, doorX, baseY + 1, doorZ, doorBottomType);
+                    setVillageBlock(blocks, cx, cz, doorX, baseY + 2, doorZ, doorTopType);
+                    setVillageBlock(blocks, cx, cz, frontX, baseY, frontZ, 'cobblestone');
+                    setVillageBlock(blocks, cx, cz, frontX, baseY + 1, frontZ, null);
+                    setVillageBlock(blocks, cx, cz, frontX, baseY + 2, frontZ, null);
+
+                    for (let wx = h.x - 1; wx <= h.x + h.w; wx++) {
+                        for (let wz = h.z - 1; wz <= h.z + h.d; wz++) {
+                            const edge = wx === h.x - 1 || wx === h.x + h.w || wz === h.z - 1 || wz === h.z + h.d;
+                            setVillageBlock(blocks, cx, cz, wx, baseY + 4, wz, edge ? getVillageRoofEdgeStair(h, wx, wz) : 'planks');
+                            if (!edge && wx > h.x && wx < h.x + h.w - 1 && wz > h.z && wz < h.z + h.d - 1) {
+                                setVillageBlock(blocks, cx, cz, wx, baseY + 5, wz, 'planks');
+                            }
+                        }
+                    }
+
+                    let bedFootX = Math.floor(h.x + h.w / 2);
+                    let bedFootZ = Math.floor(h.z + h.d / 2);
+                    let bedDx = 0, bedDz = 1;
+                    if (h.entrance === 'south') { bedFootZ = h.z + h.d - 3; bedDx = 0; bedDz = -1; }
+                    else if (h.entrance === 'north') { bedFootZ = h.z + 2; bedDx = 0; bedDz = 1; }
+                    else if (h.entrance === 'east') { bedFootX = h.x + h.w - 3; bedDx = -1; bedDz = 0; }
+                    else { bedFootX = h.x + 2; bedDx = 1; bedDz = 0; }
+                    const bedHeadX = bedFootX + bedDx;
+                    const bedHeadZ = bedFootZ + bedDz;
+                    const bedFacing = window.getFacingFromDelta ? window.getFacingFromDelta(bedDx, bedDz) : (Math.abs(bedDx) >= Math.abs(bedDz) ? (bedDx >= 0 ? 'east' : 'west') : (bedDz >= 0 ? 'south' : 'north'));
+                    const bedFootType = window.withFacing ? window.withFacing('bed_foot', bedFacing) : `bed_foot_${bedFacing}`;
+                    const bedHeadType = window.withFacing ? window.withFacing('bed_head', bedFacing) : `bed_head_${bedFacing}`;
+                    setVillageBlock(blocks, cx, cz, bedFootX, baseY + 1, bedFootZ, bedFootType);
+                    setVillageBlock(blocks, cx, cz, bedHeadX, baseY + 1, bedHeadZ, bedHeadType);
+                    villageBeds.push({ x: bedFootX, y: baseY + 1, z: bedFootZ, dx: bedDx, dz: bedDz });
+                });
+
+                [[centerX - 5, centerZ - 2], [centerX + 4, centerZ + 2], [centerX - 2, centerZ + 7]].forEach(([wx, wz]) => {
+                    setVillageBlock(blocks, cx, cz, wx, baseY + 1, wz, 'composter');
+                });
+
+                const villageKey = `${centerX},${centerZ}`;
+                window.villageDeferredSpawnPlans = window.villageDeferredSpawnPlans || {};
+                if (!window.villageDeferredSpawnPlans[villageKey]) {
+                    const villagerPositions = [
+                        [centerX - 8, centerZ - 2], [centerX - 5, centerZ - 6], [centerX, centerZ - 8], [centerX + 5, centerZ - 6], [centerX + 8, centerZ - 2],
+                        [centerX + 8, centerZ + 3], [centerX + 5, centerZ + 7], [centerX, centerZ + 8], [centerX - 5, centerZ + 7], [centerX - 8, centerZ + 3]
+                    ];
+                    const bedsForVillagers = villageBeds.length > 0 ? villageBeds : [{ x: centerX, y: baseY + 1, z: centerZ, dx: 0, dz: 1 }];
+                    const waitMs = Math.max(50, Math.floor((5.0 - (typeof gameStartTime === 'number' ? gameStartTime : 0)) * 1000));
+                    window.villageDeferredSpawnPlans[villageKey] = {
+                        spawned: false,
+                        villageKey,
+                        centerX,
+                        centerZ,
+                        baseY,
+                        positions: villagerPositions,
+                        beds: bedsForVillagers,
+                        combatKilledSlots: {}
+                    };
+                    setTimeout(function trySpawnVillageResidents() {
+                        const plan = window.villageDeferredSpawnPlans && window.villageDeferredSpawnPlans[villageKey];
+                        if (!plan || plan.spawned) return;
+                        if (!window.update100Enabled) return;
+                        if (currentDimension !== 'overworld') {
+                            setTimeout(trySpawnVillageResidents, 1200);
+                            return;
+                        }
+
+                        if (typeof window.ensureVillageVillagerPopulation === 'function') {
+                            window.ensureVillageVillagerPopulation(plan);
+                        }
+
+                        plan.spawned = true;
+                    }, waitMs);
+                }
+            });
+        }
+
+        function getVillagePlanSpawnKey(plan, index) {
+            return `village:${plan.centerX},${plan.centerZ}:${index}`;
+        }
+
+        function isLiveVillageVillagerForSlot(spawnKey) {
+            return entities.some(e => e.type === 'villager' && e.villageSpawnKey === spawnKey && e.hp > 0 && !e.dying);
+        }
+
+        function ensureVillageVillagerPopulation(plan) {
+            if (!plan || !window.update100Enabled || currentDimension !== 'overworld' || typeof window.spawnVillager !== 'function') return;
+            const positions = Array.isArray(plan.positions) ? plan.positions : [];
+            const beds = Array.isArray(plan.beds) && plan.beds.length > 0 ? plan.beds : [{ x: plan.centerX, y: plan.baseY + 1, z: plan.centerZ, dx: 0, dz: 1 }];
+            plan.combatKilledSlots = plan.combatKilledSlots || {};
+
+            positions.forEach(([vx, vz], i) => {
+                const spawnKey = getVillagePlanSpawnKey(plan, i);
+                if (plan.combatKilledSlots[spawnKey] || isLiveVillageVillagerForSlot(spawnKey)) return;
+
+                const nearbyExisting = entities.find(e =>
+                    e.type === 'villager' &&
+                    !e.villageSpawnKey &&
+                    e.hp > 0 &&
+                    !e.dying &&
+                    e.mesh.position.distanceToSquared(new THREE.Vector3(vx + 0.5, plan.baseY + 1.0, vz + 0.5)) < 3.0
+                );
+                if (nearbyExisting) {
+                    nearbyExisting.villageSpawnKey = spawnKey;
+                    nearbyExisting.homeBed = nearbyExisting.homeBed || beds[i % beds.length];
+                    return;
+                }
+
+                window.spawnVillager(vx + 0.5, vz + 0.5, plan.baseY, spawnKey, beds[i % beds.length]);
+            });
+        }
+        window.ensureVillageVillagerPopulation = ensureVillageVillagerPopulation;
+
+        window.markVillageVillagerKilled = function(villager, source) {
+            if (!villager || villager.type !== 'villager' || !villager.villageSpawnKey || (source !== 'player' && source !== 'monster')) return;
+            const plans = window.villageDeferredSpawnPlans || {};
+            Object.keys(plans).forEach(key => {
+                const plan = plans[key];
+                if (!plan || !Array.isArray(plan.positions)) return;
+                const prefix = `village:${plan.centerX},${plan.centerZ}:`;
+                if (villager.villageSpawnKey.indexOf(prefix) !== 0) return;
+                plan.combatKilledSlots = plan.combatKilledSlots || {};
+                plan.combatKilledSlots[villager.villageSpawnKey] = source;
+            });
+        };
+
         function generateChunk(cx, cz) {
             const key = `${cx},${cz}`; if (chunks.has(key)) return;
             const meshes = {}; const counts = {};
@@ -138,6 +552,9 @@
 
             const blocks = new Map();
             const dummy = new THREE.Object3D();
+            const applyBiomeInstanceColor = (mesh, type, x, z, index) => {
+                return;
+            };
             
             // 阶段 1：生成区块原始数据
             for (let x = 0; x < chunkSize; x++) {
@@ -153,7 +570,7 @@
                             if (y === bottomY || y === bottomY + 1) type = 'bedrock'; 
                             else if (y === surfaceY) {
                                 type = biome.top;
-                                if (surfaceY < 0 && (type === 'grass' || type === 'swamp_grass')) type = (biome.name === '沼泽' ? 'dirt' : 'sand');
+                                if (surfaceY < 0 && type === 'grass') type = 'sand';
                                 if (biome.name === '高山' && y > 15) type = 'snow';
                             } else if (y > surfaceY - 3) {
                                 type = biome.sub;
@@ -172,7 +589,7 @@
                                 
                                 let wormThresh = 0.08;
                                 let cavernThresh = 0.55;
-                                if (biome.name === '平原') {
+                                if (window.isPlainBiome ? window.isPlainBiome(biome) : biome.name === '平原') {
                                     wormThresh = 0.16; // 平原下蠕虫通道概率翻倍
                                     cavernThresh = 0.43; // 平原下巨型大矿洞判定门槛显著降低（几率与体积变大）
                                 }
@@ -198,12 +615,14 @@
                                         const r = seed - Math.floor(seed);
                                         
                                         if (y < -45) { // 深层
-                                            if (r < 0.12) type = 'diamond_ore';
+                                            if (window.update100Enabled && r < 0.06) type = 'emerald_ore';
+                                            else if (r < 0.14) type = 'diamond_ore';
                                             else if (r < 0.32) type = 'gold_ore';
                                             else if (r < 0.65) type = 'iron_ore';
                                             else type = 'coal_ore';
                                         } else if (y < -16) { // 中深层
-                                            if (r < 0.20) type = 'gold_ore';
+                                            if (window.update100Enabled && r < 0.06) type = 'emerald_ore';
+                                            else if (r < 0.20) type = 'gold_ore';
                                             else if (r < 0.55) type = 'iron_ore';
                                             else type = 'coal_ore';
                                         } else if (y < 8) { // 浅层
@@ -252,21 +671,17 @@
 
                         if (surfaceY >= 0) {
                             // 树木与群系植被特征生成
-                            const isTreeBiome = (biome.name === '树林' || biome.name === '沼泽' || biome.name === '桦木林' || biome.name === '针叶林' || biome.name === '丛林');
+                            const isTreeBiome = (biome.name === '树林' || biome.name === '桦木林' || biome.name === '针叶林' || biome.name === '丛林');
                             const treeChance = biome.name === '树林' ? 0.025 :
                                                biome.name === '桦木林' ? 0.025 :
-                                               biome.name === '沼泽' ? 0.015 :
                                                biome.name === '针叶林' ? 0.03 :
                                                biome.name === '丛林' ? 0.065 : 0;
                             
                             if (isTreeBiome && rand < treeChance) {
-                                if (currentTop === 'grass' || currentTop === 'swamp_grass') {
+                                if ((window.getBaseType ? window.getBaseType(currentTop) : currentTop) === 'grass') {
                                     let trunkHeight = 5;
                                     let leafType = 'leaves';
-                                    if (biome.name === '沼泽') {
-                                        trunkHeight = 4;
-                                        leafType = 'swamp_leaves';
-                                    } else if (biome.name === '针叶林') {
+                                    if (biome.name === '针叶林') {
                                         trunkHeight = 6;
                                     } else if (biome.name === '丛林') {
                                         trunkHeight = 7;
@@ -313,7 +728,7 @@
                                             }
                                         }
                                     } else {
-                                        // 普通树林、丛林、沼泽、桦木林：标准圆球/扁球形树叶
+                                        // 普通树林、丛林、桦木林：标准圆球/扁球形树叶
                                         const leafRadius = biome.name === '丛林' ? 4 : 3;
                                         for (let lx = -2; lx <= 2; lx++) {
                                             for (let lz = -2; lz <= 2; lz++) {
@@ -348,11 +763,9 @@
                             } else if (biome.name === '红砂荒漠' && rand < 0.01 && currentTop === 'sand') {
                                 // 红砂荒漠也可以有仙人掌
                                 for (let cy = 1; cy <= 2; cy++) blocks.set(`${wx},${surfaceY + cy},${wz}`, 'cactus');
-                            } else if (biome.name === '沼泽' && rand < 0.03 && surfaceY === 0) {
-                                blocks.set(`${wx},1,${wz}`, 'lily_pad');
-                            } else if (rand < 0.05 && (currentTop === 'grass' || currentTop === 'swamp_grass')) {
+                            } else if (rand < 0.05 && (window.getBaseType ? window.getBaseType(currentTop) : currentTop) === 'grass') {
                                 blocks.set(`${wx},${surfaceY + 1},${wz}`, 'tall_grass');
-                            } else if (biome.name === '向日葵平原' && rand < 0.15 && currentTop === 'grass') {
+                            } else if (biome.name === '向日葵平原' && rand < 0.15 && (window.getBaseType ? window.getBaseType(currentTop) : currentTop) === 'grass') {
                                 // 向日葵平原/花海有极高密度的草和植被
                                 blocks.set(`${wx},${surfaceY + 1},${wz}`, 'tall_grass');
                             }
@@ -453,12 +866,14 @@
             if (currentDimension !== 'overworld') {
                 for (let [k, v] of blocks) if (v === 'water') blocks.delete(k);
             }
+
+            applyVillageToChunk(blocks, cx, cz);
             
             // 合并修改过的数据
             for (const mKey in modifiedBlocks[currentDimension]) {
                 const [mx, my, mz] = mKey.split(',').map(Number);
                 if (Math.floor(mx/chunkSize) === cx && Math.floor(mz/chunkSize) === cz) {
-                    const mt = modifiedBlocks[currentDimension][mKey];
+                    let mt = modifiedBlocks[currentDimension][mKey];
                     if (mt === 'null') blocks.delete(mKey); else blocks.set(mKey, mt);
                 }
             }
@@ -497,7 +912,7 @@
                             
                             let wormThresh = 0.08;
                             let cavernThresh = 0.55;
-                            if (biome.name === '平原') {
+                            if (window.isPlainBiome ? window.isPlainBiome(biome) : biome.name === '平原') {
                                 wormThresh = 0.16;
                                 cavernThresh = 0.43;
                             }
@@ -512,7 +927,7 @@
                         // 预测固体方块类型
                         if (y === sY) {
                             let type = biome.top;
-                            if (sY < 0 && (type === 'grass' || type === 'swamp_grass')) type = (biome.name === '沼泽' ? 'dirt' : 'sand');
+                            if (sY < 0 && type === 'grass') type = 'sand';
                             if (biome.name === '高山' && y > 15) type = 'snow';
                             return type;
                         }
@@ -524,35 +939,40 @@
                 return null;
             };
 
+            const toBaseType = (t) => (t && window.getBaseType ? window.getBaseType(t) : t);
             const isTransparent = (t) => {
-                if (t === null || t === undefined) return true;
-                const tr = ['glass', 'leaves', 'swamp_leaves', 'tall_grass', 'torch', 'end_rod', 'nether_portal', 'end_portal', 'return_portal', 'door_top', 'door_bottom', 'door_top_open', 'door_bottom_open', 'cactus', 'lily_pad', 'spawner'];
-                return tr.includes(t);
+                const base = toBaseType(t);
+                if (base === null || base === undefined) return true;
+                const tr = ['glass', 'leaves', 'tall_grass', 'torch', 'end_rod', 'nether_portal', 'end_portal', 'return_portal', 'door_top', 'door_bottom', 'door_top_open', 'door_bottom_open', 'cactus', 'lily_pad', 'spawner'];
+                return tr.includes(base);
             };
             const isOpaque = (t) => {
-                if (t === null || t === undefined) return false;
-                const nonOpaque = ['glass', 'leaves', 'swamp_leaves', 'tall_grass', 'torch', 'end_rod', 'nether_portal', 'end_portal', 'end_portal_frame_empty', 'end_portal_frame_filled', 'return_portal', 'door_top', 'door_bottom', 'door_top_open', 'door_bottom_open', 'cactus', 'lily_pad', 'spawner', 'water', 'lava', 'bed', 'bed_head', 'bed_foot', 'chest', 'ice'];
-                return !nonOpaque.includes(t);
+                const base = toBaseType(t);
+                if (base === null || base === undefined) return false;
+                const nonOpaque = ['glass', 'leaves', 'tall_grass', 'torch', 'end_rod', 'nether_portal', 'end_portal', 'end_portal_frame_empty', 'end_portal_frame_filled', 'return_portal', 'door_top', 'door_bottom', 'door_top_open', 'door_bottom_open', 'cactus', 'lily_pad', 'spawner', 'water', 'lava', 'bed', 'bed_head', 'bed_foot', 'chest', 'ice'];
+                return !nonOpaque.includes(base);
             };
-            const isWater = (t) => t === 'water';
+            const isWater = (t) => toBaseType(t) === 'water';
             const getWaterH = (nx, ny, nz, t) => {
-                if (t !== 'water') return 0;
-                if (getBlockProcedural(nx, ny + 1, nz) === 'water') return 1.0;
+                if (!isWater(t)) return 0;
+                if (isWater(getBlockProcedural(nx, ny + 1, nz))) return 1.0;
                 const nKey = `${nx},${ny},${nz}`;
                 let ndist = window.waterDistances.has(nKey) ? window.waterDistances.get(nKey) : 0;
                 return Math.max(0.15, 1.0 - (ndist * 0.1));
             };
 
-            blocks.forEach((type, posKey) => {
+            blocks.forEach((fullType, posKey) => {
                 const [bx, by, bz] = posKey.split(',').map(Number);
-                if (type === 'water') {
+                const baseType = toBaseType(fullType);
+                if (baseType === 'water') {
                     const topT = getBlockProcedural(bx, by + 1, bz);
                     let h = 1.0;
-                    if (topT !== 'water') {
+                    if (!isWater(topT)) {
                         let dist = window.waterDistances.has(posKey) ? window.waterDistances.get(posKey) : 0;
                         h = Math.max(0.15, 1.0 - (dist * 0.1));
                     }
                     
+                    dummy.rotation.set(0, 0, 0);
                     dummy.position.set(bx + 0.5, by + h / 2, bz + 0.5);
                     dummy.scale.set(1, h, 1);
                     dummy.updateMatrix();
@@ -573,7 +993,7 @@
                         const nT = getBlockProcedural(nx, ny, nz);
                         if (isTransparent(nT)) {
                             meshes[faceName].setMatrixAt(counts[faceName]++, dummy.matrix);
-                        } else if (nT === 'water') {
+                        } else if (isWater(nT)) {
                             const nH = getWaterH(nx, ny, nz, nT);
                             if (h > nH + 0.01) {
                                 meshes[faceName].setMatrixAt(counts[faceName]++, dummy.matrix);
@@ -581,9 +1001,10 @@
                         }
                     }
                     dummy.scale.set(1, 1, 1); // reset
+                    dummy.rotation.set(0, 0, 0);
                 } else {
                     let isVisible = true;
-                    if (isOpaque(type)) {
+                    if (isOpaque(baseType)) {
                         const top = getBlockProcedural(bx, by + 1, bz);
                         const bottom = getBlockProcedural(bx, by - 1, bz);
                         const north = getBlockProcedural(bx, by, bz - 1);
@@ -596,20 +1017,29 @@
                     }
 
                     if (isVisible) {
-                        dummy.position.set(bx + 0.5, by + 0.5, bz + 0.5); dummy.updateMatrix();
-                        meshes[type].setMatrixAt(counts[type]++, dummy.matrix);
+                        dummy.position.set(bx + 0.5, by + 0.5, bz + 0.5);
+                        dummy.rotation.set(0, getBlockYawByFacing(fullType, baseType), 0);
+                        dummy.updateMatrix();
+                        if (meshes[baseType]) {
+                            const idx = counts[baseType]++;
+                            meshes[baseType].setMatrixAt(idx, dummy.matrix);
+                            applyBiomeInstanceColor(meshes[baseType], baseType, bx, bz, idx);
+                        }
                     }
                     const nonSolid = ['tall_grass', 'nether_portal', 'water', 'lava', 'end_rod', 'torch', 'door_top_open', 'door_bottom_open'];
-                    if (!nonSolid.includes(type)) worldBlocks.add(posKey);
+                    if (!nonSolid.includes(baseType)) worldBlocks.add(posKey);
                 }
             });
 
             for (const t in meshes) {
                 meshes[t].count = counts[t];
                 meshes[t].instanceMatrix.needsUpdate = true;
+                if (meshes[t].instanceColor) meshes[t].instanceColor.needsUpdate = true;
                 if (counts[t] > 0) meshes[t].computeBoundingSphere();
             }
-            chunks.set(key, { meshes, blocks, cx, cz });
+            const chunk = { meshes, blocks, cx, cz, torchLights: [] };
+            chunks.set(key, chunk);
+            rebuildChunkTorchLights(chunk);
 
             // Rebuild loaded neighbor chunks to update occlusion culling at chunk boundaries
             const neighbors = [
@@ -622,6 +1052,9 @@
         function rebuildChunkMesh(chunk) {
             const counts = {}; for (const type in chunk.meshes) counts[type] = 0; 
             const dummy = new THREE.Object3D();
+            const applyBiomeInstanceColor = (mesh, type, x, z, index) => {
+                return;
+            };
             
             const getBlockProcedural = (x, y, z) => {
                 const pk = `${x},${y},${z}`;
@@ -654,7 +1087,7 @@
                             
                             let wormThresh = 0.08;
                             let cavernThresh = 0.55;
-                            if (biome.name === '平原') {
+                            if (window.isPlainBiome ? window.isPlainBiome(biome) : biome.name === '平原') {
                                 wormThresh = 0.16;
                                 cavernThresh = 0.43;
                             }
@@ -669,7 +1102,7 @@
                         // 预测固体方块类型
                         if (y === sY) {
                             let type = biome.top;
-                            if (sY < 0 && (type === 'grass' || type === 'swamp_grass')) type = (biome.name === '沼泽' ? 'dirt' : 'sand');
+                            if (sY < 0 && type === 'grass') type = 'sand';
                             if (biome.name === '高山' && y > 15) type = 'snow';
                             return type;
                         }
@@ -680,35 +1113,40 @@
                 }
                 return null;
             };
+            const toBaseType = (t) => (t && window.getBaseType ? window.getBaseType(t) : t);
             const isTransparent = (t) => {
-                if (t === null || t === undefined) return true;
-                const tr = ['glass', 'leaves', 'swamp_leaves', 'tall_grass', 'torch', 'end_rod', 'nether_portal', 'end_portal', 'return_portal', 'door_top', 'door_bottom', 'door_top_open', 'door_bottom_open', 'cactus', 'lily_pad', 'spawner'];
-                return tr.includes(t);
+                const base = toBaseType(t);
+                if (base === null || base === undefined) return true;
+                const tr = ['glass', 'leaves', 'tall_grass', 'torch', 'end_rod', 'nether_portal', 'end_portal', 'return_portal', 'door_top', 'door_bottom', 'door_top_open', 'door_bottom_open', 'cactus', 'lily_pad', 'spawner'];
+                return tr.includes(base);
             };
             const isOpaque = (t) => {
-                if (t === null || t === undefined) return false;
-                const nonOpaque = ['glass', 'leaves', 'swamp_leaves', 'tall_grass', 'torch', 'end_rod', 'nether_portal', 'end_portal', 'end_portal_frame_empty', 'end_portal_frame_filled', 'return_portal', 'door_top', 'door_bottom', 'door_top_open', 'door_bottom_open', 'cactus', 'lily_pad', 'spawner', 'water', 'lava', 'bed', 'bed_head', 'bed_foot', 'chest', 'ice'];
-                return !nonOpaque.includes(t);
+                const base = toBaseType(t);
+                if (base === null || base === undefined) return false;
+                const nonOpaque = ['glass', 'leaves', 'tall_grass', 'torch', 'end_rod', 'nether_portal', 'end_portal', 'end_portal_frame_empty', 'end_portal_frame_filled', 'return_portal', 'door_top', 'door_bottom', 'door_top_open', 'door_bottom_open', 'cactus', 'lily_pad', 'spawner', 'water', 'lava', 'bed', 'bed_head', 'bed_foot', 'chest', 'ice'];
+                return !nonOpaque.includes(base);
             };
-            const isWater = (t) => t === 'water';
+            const isWater = (t) => toBaseType(t) === 'water';
             const getWaterH = (nx, ny, nz, t) => {
-                if (t !== 'water') return 0;
-                if (getBlockProcedural(nx, ny + 1, nz) === 'water') return 1.0;
+                if (!isWater(t)) return 0;
+                if (isWater(getBlockProcedural(nx, ny + 1, nz))) return 1.0;
                 const nKey = `${nx},${ny},${nz}`;
                 let ndist = window.waterDistances.has(nKey) ? window.waterDistances.get(nKey) : 0;
                 return Math.max(0.15, 1.0 - (ndist * 0.1));
             };
 
-            for (const [posKey, type] of chunk.blocks.entries()) { 
+            for (const [posKey, fullType] of chunk.blocks.entries()) { 
                 const [bx, by, bz] = posKey.split(',').map(Number); 
-                if (type === 'water') {
+                const baseType = toBaseType(fullType);
+                if (baseType === 'water') {
                     const topT = getBlockProcedural(bx, by + 1, bz);
                     let h = 1.0;
-                    if (topT !== 'water') {
+                    if (!isWater(topT)) {
                         let dist = window.waterDistances.has(posKey) ? window.waterDistances.get(posKey) : 0;
                         h = Math.max(0.15, 1.0 - (dist * 0.1));
                     }
                     
+                    dummy.rotation.set(0, 0, 0);
                     dummy.position.set(bx + 0.5, by + h / 2, bz + 0.5);
                     dummy.scale.set(1, h, 1);
                     dummy.updateMatrix();
@@ -729,7 +1167,7 @@
                         const nT = getBlockProcedural(nx, ny, nz);
                         if (isTransparent(nT)) {
                             chunk.meshes[faceName].setMatrixAt(counts[faceName]++, dummy.matrix);
-                        } else if (nT === 'water') {
+                        } else if (isWater(nT)) {
                             const nH = getWaterH(nx, ny, nz, nT);
                             if (h > nH + 0.01) {
                                 chunk.meshes[faceName].setMatrixAt(counts[faceName]++, dummy.matrix);
@@ -737,9 +1175,10 @@
                         }
                     }
                     dummy.scale.set(1, 1, 1); // reset
+                    dummy.rotation.set(0, 0, 0);
                 } else {
                     let isVisible = true;
-                    if (isOpaque(type)) {
+                    if (isOpaque(baseType)) {
                         const top = getBlockProcedural(bx, by + 1, bz);
                         const bottom = getBlockProcedural(bx, by - 1, bz);
                         const north = getBlockProcedural(bx, by, bz - 1);
@@ -752,69 +1191,42 @@
                     }
 
                     if (isVisible) {
-                        dummy.position.set(bx + 0.5, by + 0.5, bz + 0.5); dummy.updateMatrix();
-                        chunk.meshes[type].setMatrixAt(counts[type]++, dummy.matrix);
-                    }
-                }
-            }
-            // 扫描区块是否有火把
-            let chunkHasTorch = false;
-            for (const [posKey, type] of chunk.blocks.entries()) {
-                if (type === 'torch') {
-                    chunkHasTorch = true;
-                    break;
-                }
-            }
-
-            // 初始化火把区域的超亮材质（使用贴图自发光，百分之百保留纹理细节，杜绝泛白闪光弹效果）
-            if (chunkHasTorch && !window.torchMaterials) {
-                window.torchMaterials = {};
-                for (let type in materials) {
-                    const mat = materials[type];
-                    if (Array.isArray(mat)) {
-                        window.torchMaterials[type] = mat.map(m => {
-                            const cloned = m.clone();
-                            const baseColor = cloned.color ? cloned.color.clone() : new THREE.Color(0xffffff);
-                            if (cloned.map) {
-                                cloned.emissiveMap = cloned.map;
-                                cloned.emissive = baseColor.multiplyScalar(0.53); // 核心修复：乘以材质本身的基色，确保草、水等带有调色系数的方块不丢失色彩（变黑白）！
-                                cloned.emissiveIntensity = 1.0;
-                            } else if (cloned.emissive) {
-                                cloned.emissive = baseColor.multiplyScalar(0.5); 
-                                cloned.emissiveIntensity = 1.0;
-                            }
-                            return cloned;
-                        });
-                    } else if (mat) {
-                        const cloned = mat.clone();
-                        const baseColor = cloned.color ? cloned.color.clone() : new THREE.Color(0xffffff);
-                        if (cloned.map) {
-                            cloned.emissiveMap = cloned.map;
-                            cloned.emissive = baseColor.multiplyScalar(0.53);
-                            cloned.emissiveIntensity = 1.0;
-                        } else if (cloned.emissive) {
-                            cloned.emissive = baseColor.multiplyScalar(0.5);
-                            cloned.emissiveIntensity = 1.0;
+                        dummy.position.set(bx + 0.5, by + 0.5, bz + 0.5);
+                        dummy.rotation.set(0, getBlockYawByFacing(fullType, baseType), 0);
+                        dummy.updateMatrix();
+                        if (chunk.meshes[baseType]) {
+                            const idx = counts[baseType]++;
+                            chunk.meshes[baseType].setMatrixAt(idx, dummy.matrix);
+                            applyBiomeInstanceColor(chunk.meshes[baseType], baseType, bx, bz, idx);
                         }
-                        window.torchMaterials[type] = cloned;
                     }
                 }
             }
-
             for (const t in chunk.meshes) {
                 const baseType = t.startsWith('water_') ? 'water' : t;
-                const matSrc = chunkHasTorch ? window.torchMaterials : materials;
-                if (matSrc && matSrc[baseType]) {
-                    chunk.meshes[t].material = matSrc[baseType];
+                if (materials && materials[baseType]) {
+                    chunk.meshes[t].material = materials[baseType];
                 }
                 
                 chunk.meshes[t].count = counts[t];
                 chunk.meshes[t].instanceMatrix.needsUpdate = true;
+                if (chunk.meshes[t].instanceColor) chunk.meshes[t].instanceColor.needsUpdate = true;
                 if (counts[t] > 0) chunk.meshes[t].computeBoundingSphere();
             }
+            rebuildChunkTorchLights(chunk);
         }
 
-        function unloadChunk(key) { const chunk = chunks.get(key); if (!chunk) return; for (const type in chunk.meshes) { scene.remove(chunk.meshes[type]); chunk.meshes[type].dispose(); } for (const posKey of chunk.blocks.keys()) worldBlocks.delete(posKey); chunks.delete(key); }
+        function unloadChunk(key) {
+            const chunk = chunks.get(key);
+            if (!chunk) return;
+            clearChunkTorchLights(chunk);
+            for (const type in chunk.meshes) {
+                scene.remove(chunk.meshes[type]);
+                chunk.meshes[type].dispose();
+            }
+            for (const posKey of chunk.blocks.keys()) worldBlocks.delete(posKey);
+            chunks.delete(key);
+        }
 
         let chunkGenQueue = [];
         let expectedChunksSet = new Set();
@@ -864,20 +1276,48 @@
             }
         }
 
-        function generateReturnPortal() {
+        function generateEmptyReturnPortal() {
             const cx = 0; const cz = 0; const cKey = `${cx},${cz}`; let chunk = chunks.get(cKey); if (!chunk) return;
-            const surfaceY = Math.floor(8 + (biomeNoise(0, 0) || 0) * 3); // 匹配末地主岛高度
+            const surfaceY = Math.floor(8 + (biomeNoise(0, 0) || 0) * 3);
             const py = surfaceY + 1;
             for (let x = -2; x <= 2; x++) { 
                 for (let z = -2; z <= 2; z++) { 
                     const k = `${x},${py},${z}`; 
                     if (Math.abs(x) === 2 || Math.abs(z) === 2) { 
                         chunk.blocks.set(k, 'bedrock'); worldBlocks.add(k); 
-                    } else { 
-                        chunk.blocks.set(k, 'return_portal'); 
-                    } 
+                    } else if (Math.abs(x) === 1 && Math.abs(z) === 1) {
+                        chunk.blocks.set(k, 'bedrock'); worldBlocks.add(k);
+                    }
                 } 
             }
+            const centerK = `0,${py},0`;
+            chunk.blocks.set(centerK, 'bedrock'); worldBlocks.add(centerK);
+            const pillarK = `0,${py + 1},0`;
+            chunk.blocks.set(pillarK, 'bedrock'); worldBlocks.add(pillarK);
+            
+            for(let x = -1; x <= 1; x++) {
+                for(let z = -1; z <= 1; z++) {
+                    if (x===0 && z===0) continue;
+                    chunk.blocks.set(`${x},${py},${z}`, 'air');
+                }
+            }
+            rebuildChunkMesh(chunk);
+        }
+
+        window.activateReturnPortal = function() {
+            const cx = 0; const cz = 0; const cKey = `${cx},${cz}`; let chunk = chunks.get(cKey); if (!chunk) return;
+            const surfaceY = Math.floor(8 + (biomeNoise(0, 0) || 0) * 3);
+            const py = surfaceY + 1;
+            for (let x = -1; x <= 1; x++) { 
+                for (let z = -1; z <= 1; z++) { 
+                    const k = `${x},${py},${z}`; 
+                    if (!(x===0 && z===0)) {
+                        chunk.blocks.set(k, 'return_portal'); 
+                    }
+                } 
+            }
+            const eggK = `0,${py + 2},0`;
+            chunk.blocks.set(eggK, 'obsidian'); worldBlocks.add(eggK);
             rebuildChunkMesh(chunk);
         }
 
@@ -887,6 +1327,21 @@
         const highlightGeo = new THREE.BoxGeometry(1.005, 1.005, 1.005); const highlightMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 });
         const highlightBox = new THREE.LineSegments(new THREE.EdgesGeometry(highlightGeo), highlightMat); highlightBox.visible = false; scene.add(highlightBox);
         const miningOverlay = new THREE.Mesh(new THREE.BoxGeometry(1.01, 1.01, 1.01), destroyStages[0]); miningOverlay.visible = false; scene.add(miningOverlay);
+        const intersectMatrix = new THREE.Matrix4();
+        const intersectPos = new THREE.Vector3();
+        window.getIntersectBlockCoords = function(intersect) {
+            if (intersect && intersect.object && intersect.object.isInstancedMesh && intersect.instanceId !== undefined) {
+                intersect.object.getMatrixAt(intersect.instanceId, intersectMatrix);
+                intersectPos.setFromMatrixPosition(intersectMatrix);
+                return {
+                    x: Math.floor(intersectPos.x),
+                    y: Math.floor(intersectPos.y),
+                    z: Math.floor(intersectPos.z)
+                };
+            }
+            const p = intersect.point.clone().sub(intersect.face.normal.clone().multiplyScalar(0.01));
+            return { x: Math.floor(p.x), y: Math.floor(p.y), z: Math.floor(p.z) };
+        };
         const controls = new PointerLockControls(camera, document.body);
         window.controls = controls;
         const inventoryUiEl = document.getElementById('inventory-ui'); const debugUiEl = document.getElementById('debug-ui'); const chatContainer = document.getElementById('chat-container'); const chatInput = document.getElementById('chat-input');

@@ -5,7 +5,7 @@ function buildPlayerMesh(skinDataURL, playerName) {
     img.crossOrigin = "Anonymous";
     
     // 使用 Base64 嵌入数据
-    const defaultSkin = (window.TEXTURE_DATA && window.TEXTURE_DATA['steve']) ? window.TEXTURE_DATA['steve'] : 'textures/steve.png';
+    const defaultSkin = window.getTextureSource ? window.getTextureSource('steve') : ((window.TEXTURE_DATA && window.TEXTURE_DATA['steve']) ? window.TEXTURE_DATA['steve'] : 'textures/steve.png');
     img.src = skinDataURL || defaultSkin;
     
     img.onload = () => {

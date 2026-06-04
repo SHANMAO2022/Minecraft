@@ -1,12 +1,13 @@
         // ==========================================
-        const velocity = new THREE.Vector3(); const direction = new THREE.Vector3(); const clock = new THREE.Clock(); let portalTimer = 0; let autoSaveTimer = 0;
+        const velocity = new THREE.Vector3(); const direction = new THREE.Vector3(); const clock = new THREE.Clock(); let portalTimer = 0; let autoSaveTimer = 0; let villagePopulationCheckTimer = 0;
         let renderFrames = 0; let lastFpsTime = performance.now();
-        const fpsDisplay = document.getElementById('fps-display'); const coordsDisplay = document.getElementById('coords-display'); const timeDisplay = document.getElementById('time-display');
+        const fpsDisplay = document.getElementById('fps-display'); const coordsDisplay = document.getElementById('coords-display'); const facingDisplay = document.getElementById('facing-display'); const timeDisplay = document.getElementById('time-display');
 
         function animate() {
             requestAnimationFrame(animate); const delta = clock.getDelta();
 
-            const isGameRunning = isPlaying && !isDead && !isGameClear && pauseScreen.style.display !== 'flex' && titleScreen.style.display !== 'flex' && worldSelectScreen.style.display !== 'flex' && createWorldScreen.style.display !== 'flex' && document.getElementById('options-screen').style.display !== 'flex' && document.getElementById('multiplayer-screen').style.display !== 'flex';
+            const tradeUi = document.getElementById('trade-ui');
+            const isGameRunning = isPlaying && !isDead && !isGameClear && pauseScreen.style.display !== 'flex' && titleScreen.style.display !== 'flex' && worldSelectScreen.style.display !== 'flex' && createWorldScreen.style.display !== 'flex' && document.getElementById('options-screen').style.display !== 'flex' && document.getElementById('multiplayer-screen').style.display !== 'flex' && (!tradeUi || tradeUi.style.display !== 'flex');
 
             let sunHeight = Math.sin((worldTime % CYCLE_LENGTH / DAY_LENGTH) * Math.PI);
             let isNight = sunHeight <= 0.1;
@@ -21,7 +22,15 @@
                         console.log("自动保存成功");
                     }
                 }
-                if (gameStartTime < 3.0) gameStartTime += delta;
+                if (gameStartTime < 5.0) gameStartTime += delta;
+                villagePopulationCheckTimer += delta;
+                if (villagePopulationCheckTimer > 3.0) {
+                    villagePopulationCheckTimer = 0;
+                    if (window.update100Enabled && currentDimension === 'overworld' && typeof window.ensureVillageVillagerPopulation === 'function') {
+                        const plans = window.villageDeferredSpawnPlans || {};
+                        Object.keys(plans).forEach(key => window.ensureVillageVillagerPopulation(plans[key]));
+                    }
+                }
 
                 if (typeof myPeer !== 'undefined' && myPeer && performance.now() - (window.lastSyncTime || 0) > 100) {
                     window.lastSyncTime = performance.now();
@@ -38,17 +47,71 @@
                 }
 
                 const maxEntityDistSq = 4096; // 64 * 64
+                const entityDelta = Math.min(delta, 0.1);
+                const mobTypes = ['pig', 'cow', 'zombie', 'spider', 'blaze', 'enderman', 'villager'];
                 for (let i = entities.length - 1; i >= 0; i--) { 
                     const e = entities[i]; 
                     const distSq = e.mesh.position.distanceToSquared(camera.position);
+                    if (mobTypes.includes(e.type)) {
+                        // Mobs are persistent; lag spikes should never delete them.
+                        if (!e.persistent && distSq < (12 * 12)) e.persistent = true;
+                        if (!e.persistent) e.persistent = true;
+                    }
+
                     if (distSq > maxEntityDistSq && e.type !== 'dragon') {
                         e.mesh.visible = false;
                         continue;
                     }
                     e.mesh.visible = true;
-                    if (e.update(delta, worldTime, sunHeight, isNight)) { scene.remove(e.mesh); if (e.beam) scene.remove(e.beam); entities.splice(i, 1); } 
+
+                    if (mobTypes.includes(e.type) && typeof window.tryResolveMobStuck === 'function' && typeof window.getMobCollisionProfile === 'function') {
+                        const profile = window.getMobCollisionProfile(e.type);
+                        if (profile) {
+                            window.tryResolveMobStuck(e, profile.yOffset, profile.radius, profile.height);
+                        }
+                    }
+                    if (mobTypes.includes(e.type)) {
+                        if (typeof window.updateMobAmbientSound === 'function') window.updateMobAmbientSound(e, entityDelta, distSq);
+                        if (typeof window.updateMobFlee === 'function') window.updateMobFlee(e, entityDelta);
+                    }
+
+                    // Centralized mob damage red flash timer
+                    if (e.redTimer !== undefined) {
+                        e.redTimer -= delta;
+                        if (e.redTimer <= 0) {
+                            delete e.redTimer;
+                            e.mesh.traverse(c => {
+                                if (c.isMesh && c.material) {
+                                    if (Array.isArray(c.material)) {
+                                        c.material.forEach(m => { if (m && m.emissive) m.emissive.setHex(0x000000); });
+                                    } else if (c.material.emissive) {
+                                        c.material.emissive.setHex(0x000000);
+                                    }
+                                }
+                            });
+                        } else {
+                            e.mesh.traverse(c => {
+                                if (c.isMesh && c.material && c.material.emissive) {
+                                    c.material.emissive.setHex(0xaa0000);
+                                }
+                            });
+                        }
+                    }
+
+                    if (e.update(entityDelta, worldTime, sunHeight, isNight)) { scene.remove(e.mesh); if (e.beam) scene.remove(e.beam); entities.splice(i, 1); } 
                 }
-                for (let i = particles.length - 1; i >= 0; i--) { const p = particles[i]; p.life -= delta; p.mesh.position.addScaledVector(p.vel, delta); p.mesh.scale.setScalar(p.life); if (p.life <= 0) { scene.remove(p.mesh); particles.splice(i, 1); } }
+                for (let i = particles.length - 1; i >= 0; i--) { 
+                    const p = particles[i]; 
+                    p.life -= delta; 
+                    p.vel.y -= 12 * delta; // Gravity
+                    p.mesh.position.addScaledVector(p.vel, delta); 
+                    const scaleFactor = Math.max(0, p.life / (p.maxLife || 1.0));
+                    p.mesh.scale.setScalar(scaleFactor); 
+                    if (p.life <= 0) { 
+                        scene.remove(p.mesh); 
+                        particles.splice(i, 1); 
+                    } 
+                }
                 if (typeof myConnection === 'undefined' || !myConnection) {
                     handleMobSpawning(delta, isNight);
                 }
@@ -74,7 +137,7 @@
                 for (const pos in furnaceStates) {
                     const fState = furnaceStates[pos];
                     const input = fState.items[0]; const fuel = fState.items[1];
-                    const recipes = { iron_ore: 'iron_ingot', gold_ore: 'gold_ingot', raw_porkchop: 'cooked_porkchop', raw_beef: 'cooked_beef' };
+                    const recipes = { iron_ore: 'iron_ingot', gold_ore: 'gold_ingot', raw_porkchop: 'cooked_porkchop', raw_beef: 'cooked_beef', cobblestone: 'stone' };
                     const isSmeltable = input && recipes[input.type];
                     
                     if (fState.burn > 0) {
@@ -116,13 +179,23 @@
             const now = performance.now(); renderFrames++; if (now - lastFpsTime >= 1000) { fpsDisplay.innerText = `FPS: ${renderFrames}`; renderFrames = 0; lastFpsTime = now; }
             if (controls.isLocked) { 
                 coordsDisplay.innerText = `XYZ: ${camera.position.x.toFixed(1)} / ${camera.position.y.toFixed(1)} / ${camera.position.z.toFixed(1)}`; 
+                let facingText = '北';
+                let dir = new THREE.Vector3();
+                camera.getWorldDirection(dir);
+                if (Math.abs(dir.x) > Math.abs(dir.z)) {
+                    facingText = dir.x > 0 ? '东' : '西';
+                } else {
+                    facingText = dir.z > 0 ? '南' : '北';
+                }
+                facingDisplay.innerText = `朝向: ${facingText}`;
                 let min = Math.floor(timeUntilSwitch / 60); 
                 let sec = Math.floor(timeUntilSwitch % 60).toString().padStart(2, '0'); 
                 if (currentDimension === 'overworld') { timeDisplay.innerText = `离${nextPhase}: ${min}:${sec}`; } 
                 else { timeDisplay.innerText = `当前世界无时间概念`; }
                 
-                const gmText = gameMode === 0 ? "创造 [双击空格飞行]" : "生存 [按 T 输入指令]";
+                const gmText = gameMode === 0 ? "创造 [双击空格飞行]" : (gameMode === 2 ? "旁观者 [穿墙飞行模式]" : "生存 [按 T 输入指令]");
                 document.getElementById('gamemode-display').innerText = `模式: ${gmText}`;
+                if (window.updateSpectatorXrayMaterials) window.updateSpectatorXrayMaterials(gameMode === 2);
                 if (window.getBiome) {
                     const b = window.getBiome(Math.floor(camera.position.x), Math.floor(camera.position.z));
                     document.getElementById('biome-display').innerText = `群系: ${b.name}`;
@@ -135,6 +208,12 @@
             }
             let isPlayerInWater = false; let isPlayerInLava = false;
             if (controls.isLocked === true) { const curBx = Math.floor(camera.position.x); const curBy = Math.floor(camera.position.y - 1); const curByEye = Math.floor(camera.position.y); const curBz = Math.floor(camera.position.z); const bFeet = getBlock(curBx, curBy, curBz); const bHead = getBlock(curBx, curByEye, curBz); if (bFeet === 'water' || bHead === 'water') isPlayerInWater = true; if (bFeet === 'lava' || bHead === 'lava') isPlayerInLava = true; if (bFeet === 'magma' && !isFlying && gameMode === 1 && playerInvulnTimer <= 0) { takeDamage(1); } }
+            const sprintActive = isGameRunning && sprintEnabled && !isFlying && gameMode !== 2 && currentHunger > 0 && !isPlayerInWater && !isPlayerInLava && (moveForward || moveBackward || moveLeft || moveRight);
+            const targetFov = sprintActive ? 88 : 75;
+            if (Math.abs(camera.fov - targetFov) > 0.01) {
+                camera.fov += (targetFov - camera.fov) * Math.min(1, delta * 8);
+                camera.updateProjectionMatrix();
+            }
             
             if (isPlayerInWater) { 
                 scene.background.setHex(0x0055ff);
@@ -218,7 +297,15 @@
             if (playerInvulnTimer > 0) playerInvulnTimer -= dt;
 
             if (controls.isLocked === true && !isInventoryOpen && !isDead && !isGameClear) {
-                updateChunks(); hungerTimer += dt; if (hungerTimer > 30 && gameMode === 1) { hungerTimer = 0; if (currentHunger > 0) { currentHunger = Math.max(0, currentHunger - 0.5); updateStatusUI(); } }
+                updateChunks();
+                const pCx = Math.floor(camera.position.x / chunkSize);
+                const pCz = Math.floor(camera.position.z / chunkSize);
+                const isPlayerChunkLoaded = chunks.has(`${pCx},${pCz}`);
+                if (!isPlayerChunkLoaded) {
+                    velocity.set(0, 0, 0);
+                    highlightBox.visible = false;
+                } else {
+                    hungerTimer += dt; if (hungerTimer > 30 && gameMode === 1) { hungerTimer = 0; if (currentHunger > 0) { currentHunger = Math.max(0, currentHunger - 0.5); updateStatusUI(); } }
                 
                 // 处理流体更新
                 if (window.liquidQueue && window.liquidQueue.size > 0) {
@@ -231,27 +318,29 @@
                         currentQueue.forEach(key => {
                             const [bx, by, bz] = key.split(',').map(Number);
                             const currentType = getBlock(bx, by, bz);
-                            if (currentType !== 'water') return; // 如果已经不是水了则跳过
+                            if (currentType !== 'water' && currentType !== 'lava') return;
                             
-                            let dist = window.waterDistances.has(key) ? window.waterDistances.get(key) : 0;
+                            const distMap = currentType === 'lava' ? window.lavaDistances : window.waterDistances;
+                            const maxFlowDist = currentType === 'lava' ? 4 : 7;
+                            let dist = distMap.has(key) ? distMap.get(key) : 0;
                             const downType = getBlock(bx, by - 1, bz);
                             const isAirOrReplaceable = (t) => t === null || t === undefined || t === 'tall_grass';
                             
                             // 1. 向下流动优先
                             if (isAirOrReplaceable(downType)) {
-                                setBlock(bx, by - 1, bz, 'water');
-                                window.waterDistances.set(`${bx},${by - 1},${bz}`, 0); // 垂直下落的水重置距离
+                                setBlock(bx, by - 1, bz, currentType);
+                                distMap.set(`${bx},${by - 1},${bz}`, 0); // 垂直下落的流体重置距离
                             } 
-                            // 2. 如果下面是固体或水，则向四周水平蔓延
-                            else if (downType !== null && downType !== undefined && dist < 7) {
+                            // 2. 如果下面是固体或同类流体，则向四周水平蔓延
+                            else if (downType !== null && downType !== undefined && dist < maxFlowDist) {
                                 const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
                                 dirs.forEach(d => {
                                     const nx = bx + d[0], nz = bz + d[1];
                                     const sideType = getBlock(nx, by, nz);
                                     if (isAirOrReplaceable(sideType)) {
                                         const nKey = `${nx},${by},${nz}`;
-                                        setBlock(nx, by, nz, 'water');
-                                        window.waterDistances.set(nKey, dist + 1);
+                                        setBlock(nx, by, nz, currentType);
+                                        distMap.set(nKey, dist + 1);
                                     }
                                 });
                             }
@@ -261,33 +350,120 @@
 
                 if (currentHunger >= 18 && currentHealth < 20) { healTimer += dt; if (healTimer > 4) { healTimer = 0; currentHealth++; updateStatusUI(); } } else healTimer = 0;
                 if (currentHunger <= 0) { starveTimer += dt; if (starveTimer > 4) { starveTimer = 0; takeDamage(1); } } else starveTimer = 0;
-                let speedMult = 1.0; if (isPlayerInWater) speedMult = 0.5; if (isPlayerInLava) { speedMult = 0.3; if (playerInvulnTimer <= 0) takeDamage(2); }
+                let speedMult = 1.0; if (isPlayerInWater) speedMult = 0.5; if (isPlayerInLava) { speedMult = 0.3; if (playerInvulnTimer <= 0) takeDamage(2); } if (sprintActive) speedMult *= 1.6;
                 velocity.x -= velocity.x * 10.0 * dt; velocity.z -= velocity.z * 10.0 * dt;
-                if (isFlying) { velocity.y -= velocity.y * 10.0 * dt; if (jumpPressed) velocity.y += 60.0 * dt; if (shiftPressed) velocity.y -= 60.0 * dt; speedMult = 2.5; }
+                if (isFlying || gameMode === 2) { velocity.y -= velocity.y * 10.0 * dt; if (jumpPressed) velocity.y += 60.0 * dt; if (shiftPressed) velocity.y -= 60.0 * dt; speedMult = 2.5; }
                 else { if (isPlayerInWater || isPlayerInLava) { velocity.y -= 5.0 * dt; if (velocity.y < -3.0) velocity.y = -3.0; } else { velocity.y -= 25.0 * dt; } }
                 direction.z = Number(moveForward) - Number(moveBackward); direction.x = Number(moveRight) - Number(moveLeft); direction.normalize();
                 const speed = 40.0 * speedMult; if (moveForward || moveBackward) velocity.z -= direction.z * speed * dt; if (moveLeft || moveRight) velocity.x -= direction.x * speed * dt;
-                if (jumpPressed && !isFlying) { if (canJump) { velocity.y = 8.5; canJump = false; if (currentHunger > 0 && gameMode === 1) { currentHunger = Math.max(0, currentHunger - 0.1); updateStatusUI(); } } else if (isPlayerInWater || isPlayerInLava) { velocity.y += 35.0 * dt; if (velocity.y > 6.0) velocity.y = 6.0; } }
+                if (jumpPressed && !isFlying && gameMode !== 2) { if (canJump) { velocity.y = 8.5; canJump = false; if (currentHunger > 0 && gameMode === 1) { currentHunger = Math.max(0, currentHunger - 0.1); updateStatusUI(); } } else if (isPlayerInWater || isPlayerInLava) { velocity.y += 35.0 * dt; if (velocity.y > 6.0) velocity.y = 6.0; } }
                 const camObj = controls.getObject(); const oldPos = camObj.position.clone(); camObj.position.copy(oldPos); controls.moveRight(-velocity.x * dt); controls.moveForward(-velocity.z * dt); const totalDx = camObj.position.x - oldPos.x; const totalDz = camObj.position.z - oldPos.z;
-                camObj.position.copy(oldPos); if (velocity.y < 0 && !checkCollisionGeneric(camObj.position.x, camObj.position.y - 1.55, camObj.position.z, 0.28, 1.7)) { highestY = Math.max(highestY, camObj.position.y); isFalling = true; } else if (velocity.y > 0) { highestY = camObj.position.y; isFalling = false; }
+                camObj.position.copy(oldPos); if (velocity.y < 0 && gameMode !== 2 && !checkCollisionGeneric(camObj.position.x, camObj.position.y - 1.55, camObj.position.z, 0.28, 1.7)) { highestY = Math.max(highestY, camObj.position.y); isFalling = true; } else if (velocity.y > 0) { highestY = camObj.position.y; isFalling = false; }
                 camObj.position.y += velocity.y * dt;
-                if (checkCollisionGeneric(camObj.position.x, camObj.position.y - 1.55, camObj.position.z, 0.28, 1.7)) { if (velocity.y < 0) { camObj.position.y = Math.floor(camObj.position.y - 1.55) + 1 + 1.55; if (isFalling && !isFlying) { const fallDist = highestY - camObj.position.y; if (fallDist > 4 && gameStartTime >= 3.0 && !isSpawnImmunity && !isPlayerInWater && !isPlayerInLava) { takeDamage(Math.floor(fallDist - 3)); } highestY = camObj.position.y; isFalling = false; isSpawnImmunity = false; } } else { camObj.position.y -= velocity.y * dt; } velocity.y = 0; }
-                canJump = checkCollisionGeneric(camObj.position.x, camObj.position.y - 1.55 - 0.05, camObj.position.z, 0.28, 0.1);
-                if (checkCollisionGeneric(camObj.position.x, camObj.position.y - 1.0, camObj.position.z, 0.2, 1.0)) { camObj.position.y += 3.0 * dt; }
+                if (gameMode !== 2 && checkCollisionGeneric(camObj.position.x, camObj.position.y - 1.55, camObj.position.z, 0.28, 1.7)) { 
+                    if (velocity.y < 0) { 
+                        const landY = getLandingY(camObj.position.x, camObj.position.y - 1.55, camObj.position.z, 0.28, 1.7);
+                        if (landY !== null) {
+                            camObj.position.y = landY + 1.55;
+                        } else {
+                            camObj.position.y = Math.floor(camObj.position.y - 1.55) + 1 + 1.55;
+                        }
+                        if (isFalling && !isFlying) { 
+                            const curBx = Math.floor(camObj.position.x);
+                            const curBy = Math.floor(camObj.position.y - 1.6);
+                            const curBz = Math.floor(camObj.position.z);
+                            let feetBlock = getBlock(curBx, curBy, curBz);
+                            if (!feetBlock) {
+                                const offsets = [-0.28, 0.28];
+                                for (const dx of offsets) {
+                                    for (const dz of offsets) {
+                                        const b = getBlock(Math.floor(camObj.position.x + dx), curBy, Math.floor(camObj.position.z + dz));
+                                        if (b && b !== 'water' && b !== 'lava') {
+                                            feetBlock = b;
+                                            break;
+                                        }
+                                    }
+                                    if (feetBlock) break;
+                                }
+                            }
+
+                            const fallDist = highestY - camObj.position.y; 
+                            if (fallDist > 4 && gameStartTime >= 3.0 && !isSpawnImmunity && !isPlayerInWater && !isPlayerInLava) { 
+                                takeDamage(Math.floor(fallDist - 3)); 
+                            } 
+                            highestY = camObj.position.y; 
+                            isFalling = false; 
+                            isSpawnImmunity = false; 
+                        } 
+                    } else { 
+                        camObj.position.y -= velocity.y * dt; 
+                    } 
+                    velocity.y = 0; 
+                }
+                canJump = gameMode === 2 ? true : checkCollisionGeneric(camObj.position.x, camObj.position.y - 1.55 - 0.05, camObj.position.z, 0.28, 0.1);
+                if (gameMode !== 2 && checkCollisionGeneric(camObj.position.x, camObj.position.y - 1.0, camObj.position.z, 0.2, 1.0)) { camObj.position.y += 3.0 * dt; }
                 const moveSteps = Math.min(Math.ceil(Math.max(Math.abs(totalDx), Math.abs(totalDz)) / 0.1), 10) || 1; const stepX = totalDx / moveSteps; const stepZ = totalDz / moveSteps;
-                for (let s = 0; s < moveSteps; s++) { camObj.position.x += stepX; if (checkCollisionGeneric(camObj.position.x, camObj.position.y - 1.55 + 0.01, camObj.position.z, 0.28, 1.7)) { camObj.position.x -= stepX; velocity.x = 0; } camObj.position.z += stepZ; if (checkCollisionGeneric(camObj.position.x, camObj.position.y - 1.55 + 0.01, camObj.position.z, 0.28, 1.7)) { camObj.position.z -= stepZ; velocity.z = 0; } }
+                for (let s = 0; s < moveSteps; s++) { 
+                    camObj.position.x += stepX; 
+                    if (gameMode !== 2 && checkCollisionGeneric(camObj.position.x, camObj.position.y - 1.55 + 0.01, camObj.position.z, 0.28, 1.7)) { 
+                        let stepUpSuccess = false;
+                        if (!checkCollisionGeneric(camObj.position.x, camObj.position.y - 1.55 + 0.5, camObj.position.z, 0.28, 1.7)) {
+                            camObj.position.y += 0.5;
+                            stepUpSuccess = true;
+                        }
+                        if (!stepUpSuccess) {
+                            camObj.position.x -= stepX; 
+                            velocity.x = 0; 
+                        }
+                    } 
+                    camObj.position.z += stepZ; 
+                    if (gameMode !== 2 && checkCollisionGeneric(camObj.position.x, camObj.position.y - 1.55 + 0.01, camObj.position.z, 0.28, 1.7)) { 
+                        let stepUpSuccess = false;
+                        if (!checkCollisionGeneric(camObj.position.x, camObj.position.y - 1.55 + 0.5, camObj.position.z, 0.28, 1.7)) {
+                            camObj.position.y += 0.5;
+                            stepUpSuccess = true;
+                        }
+                        if (!stepUpSuccess) {
+                            camObj.position.z -= stepZ; 
+                            velocity.z = 0; 
+                        }
+                    } 
+                }
+
                 const curBx = Math.floor(camObj.position.x); const curBy = Math.floor(camObj.position.y - 1); const curBz = Math.floor(camObj.position.z); const blockInside = getBlock(curBx, curBy, curBz) || getBlock(curBx, Math.floor(camObj.position.y), curBz);
                 if (blockInside === 'nether_portal') { portalTimer += dt; document.getElementById('portal-overlay').style.opacity = portalTimer / 3.0; if (portalTimer >= 3.0) { portalTimer = 0; document.getElementById('portal-overlay').style.opacity = 0; switchDimension(currentDimension === 'overworld' ? 'nether' : 'overworld'); } }
                 else if (blockInside === 'end_portal') { portalTimer = 0; document.getElementById('portal-overlay').style.opacity = 0; switchDimension('end'); }
                 else if (blockInside === 'return_portal') { if (!isGameClear) { isGameClear = true; if (window.awardAchievement) window.awardAchievement('free_the_end'); controls.unlock(); document.getElementById('win-screen').style.display = 'flex'; let scroll = 0; const credits = document.getElementById('credits-content'); winScroller = setInterval(() => { scroll += 1; credits.style.transform = `translateY(-${scroll}px)`; if (scroll > 1500) clearInterval(winScroller); }, 50); } }
                 else { portalTimer = 0; document.getElementById('portal-overlay').style.opacity = 0; }
                 if (actionTimer > 0) { actionTimer -= dt; if (actionType === 'swing') { const p = 1 - (actionTimer / 0.3); heldItemGroup.rotation.x = Math.sin(p * Math.PI) * -1; heldItemGroup.position.y = -0.4 + Math.sin(p * Math.PI) * 0.2; } else if (actionType === 'eat') { const p = 1 - (actionTimer / 0.5); heldItemGroup.position.x = 0.4 - Math.sin(p * Math.PI) * 0.3; heldItemGroup.position.y = -0.4 + Math.sin(p * Math.PI * 6) * 0.1; heldItemGroup.rotation.z = Math.sin(p * Math.PI) * -0.5; } if (actionTimer <= 0) { heldItemGroup.rotation.set(0, 0, 0); heldItemGroup.position.set(0.4, -0.4, -0.6); if (actionType === 'swing' && isMining) actionTimer = 0.3; } }
-                else { if (velocity.length() > 1 && canJump && !isFlying) { heldItemGroup.position.y = -0.4 + Math.sin(worldTime * 12) * 0.03; heldItemGroup.position.x = 0.4 + Math.cos(worldTime * 6) * 0.01; } else { heldItemGroup.position.set(0.4, -0.4, -0.6); } heldItemGroup.rotation.set(0, 0, 0); }
-                raycaster.setFromCamera(center, camera); const activeMeshes = []; for (const chunk of chunks.values()) blockTypes.forEach(type => { if (type !== 'water' && type !== 'lava' && chunk.meshes[type].count > 0) activeMeshes.push(chunk.meshes[type]); }); const intersects = raycaster.intersectObjects(activeMeshes);
-                if (intersects.length > 0) {
+                else { if (velocity.length() > 1 && canJump && !isFlying && gameMode !== 2) { heldItemGroup.position.y = -0.4 + Math.sin(worldTime * 12) * 0.03; heldItemGroup.position.x = 0.4 + Math.cos(worldTime * 6) * 0.01; } else { heldItemGroup.position.set(0.4, -0.4, -0.6); } heldItemGroup.rotation.set(0, 0, 0); }
+                // Avoid a full-world raycast every frame (major source of stutter).
+                // Only raycast nearby chunks and throttle the rate.
+                if (!window._lastRaycastTime) window._lastRaycastTime = 0;
+                const now = performance.now();
+                let intersects = window._cachedRaycastHits || [];
+                if (now - window._lastRaycastTime > 16) {
+                    window._lastRaycastTime = now;
+                    raycaster.setFromCamera(center, camera);
+                    const activeMeshes = [];
+                    const pcx = Math.floor(camera.position.x / chunkSize);
+                    const pcz = Math.floor(camera.position.z / chunkSize);
+                    for (let dx = -2; dx <= 2; dx++) {
+                        for (let dz = -2; dz <= 2; dz++) {
+                            const chunk = chunks.get(`${pcx + dx},${pcz + dz}`);
+                            if (!chunk) continue;
+                            blockTypes.forEach(type => {
+                                if (type !== 'water' && type !== 'lava' && chunk.meshes[type] && chunk.meshes[type].count > 0) activeMeshes.push(chunk.meshes[type]);
+                            });
+                        }
+                    }
+                    intersects = raycaster.intersectObjects(activeMeshes);
+                    window._cachedRaycastHits = intersects;
+                }
+                if (intersects.length > 0 && gameMode !== 2) {
                     const intersect = intersects[0]; 
-                    const p = intersect.point.clone().sub(intersect.face.normal.clone().multiplyScalar(0.01)); 
-                    const bx = Math.floor(p.x); const by = Math.floor(p.y); const bz = Math.floor(p.z); 
+                    const hitBlockPos = window.getIntersectBlockCoords ? window.getIntersectBlockCoords(intersect) : null; const p = hitBlockPos ? null : intersect.point.clone().sub(intersect.face.normal.clone().multiplyScalar(0.01)); 
+                    const bx = hitBlockPos ? hitBlockPos.x : Math.floor(p.x); const by = hitBlockPos ? hitBlockPos.y : Math.floor(p.y); const bz = hitBlockPos ? hitBlockPos.z : Math.floor(p.z); 
                     const key = `${bx},${by},${bz}`; 
                     const blockType = getBlock(bx, by, bz);
                     
@@ -297,31 +473,51 @@
                     if (gameMode === 0 && window.isLeftMouseDown) {
                         if (creativeBreakTimer <= 0) {
                             if (blockType && blockType !== 'bedrock' && blockType !== 'nether_portal' && blockType !== 'end_portal' && blockType !== 'return_portal' && blockType !== 'end_portal_frame_empty') {
+                                if (window.spawnBlockBreakParticles) window.spawnBlockBreakParticles(bx, by, bz, blockType);
                                 setBlock(bx, by, bz, null);
                                 // 处理双层方块
                                 if (blockType === 'bed_head' || blockType === 'bed_foot') { const targetType = blockType === 'bed_head' ? 'bed_foot' : 'bed_head'; const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]; for (let d of dirs) { if (getBlock(bx + d[0], by, bz + d[1]) === targetType) { setBlock(bx + d[0], by, bz + d[1], null); break; } } }
                                 if (blockType === 'door_top' || blockType === 'door_top_open') { const other = getBlock(bx, by - 1, bz); if (other === 'door_bottom' || other === 'door_bottom_open') setBlock(bx, by - 1, bz, null); }
                                 else if (blockType === 'door_bottom' || blockType === 'door_bottom_open') { const other = getBlock(bx, by + 1, bz); if (other === 'door_top' || other === 'door_top_open') setBlock(bx, by + 1, bz, null); }
                                 highlightBox.visible = false;
-                                creativeBreakTimer = 0.25; // 连拆间隔 0.25 秒
+                                creativeBreakTimer = 0.35;
                             }
                         }
                     }
                     if (creativeBreakTimer > 0) creativeBreakTimer -= delta;
 
+                    const fullBlockType = getFullBlock(bx, by, bz) || blockType;
+                    const doorFacing = window.getTypeFacing ? window.getTypeFacing(fullBlockType) : null;
+                    const getDoorYaw = (facing) => {
+                        if (facing === 'east') return -Math.PI / 2;
+                        if (facing === 'south') return Math.PI;
+                        if (facing === 'west') return Math.PI / 2;
+                        return 0;
+                    };
+                    const rotateOffset = (ox, oz, yaw) => ({
+                        x: ox * Math.cos(yaw) + oz * Math.sin(yaw),
+                        z: -ox * Math.sin(yaw) + oz * Math.cos(yaw)
+                    });
+                    const doorYaw = getDoorYaw(doorFacing);
                     if (blockType === 'door_top' || blockType === 'door_bottom') {
                         highlightBox.scale.set(1, 1, 0.1);
-                        highlightBox.position.set(bx + 0.5, by + 0.5, bz + 0.5 - 0.45);
+                        const off = rotateOffset(0, -0.45, doorYaw);
+                        highlightBox.position.set(bx + 0.5 + off.x, by + 0.5, bz + 0.5 + off.z);
+                        highlightBox.rotation.set(0, doorYaw, 0);
                     } else if (blockType === 'door_top_open' || blockType === 'door_bottom_open') {
                         highlightBox.scale.set(0.1, 1, 1);
-                        highlightBox.position.set(bx + 0.5 - 0.45, by + 0.5, bz + 0.5);
+                        const off = rotateOffset(-0.45, 0, doorYaw);
+                        highlightBox.position.set(bx + 0.5 + off.x, by + 0.5, bz + 0.5 + off.z);
+                        highlightBox.rotation.set(0, doorYaw, 0);
                     } else {
                         highlightBox.scale.set(1, 1, 1);
                         highlightBox.position.set(bx + 0.5, by + 0.5, bz + 0.5);
+                        highlightBox.rotation.set(0, 0, 0);
                     }
                     if (isMining) { 
                         if (targetBlockKey !== key) { targetBlockKey = key; miningTime = 0; } 
-                        const blockType = getBlock(bx, by, bz); 
+                        const rawBlockType = getFullBlock(bx, by, bz) || getBlock(bx, by, bz); 
+                        const blockType = window.getBaseType ? window.getBaseType(rawBlockType) : rawBlockType;
                         if (blockType && blockType !== 'bedrock' && blockType !== 'nether_portal' && blockType !== 'end_portal' && blockType !== 'return_portal' && blockType !== 'end_portal_frame_empty') { 
                             const blockDef = ITEMS[blockType]; 
                             const heldItem = invState.hotbar[currentSlotIndex]; 
@@ -330,6 +526,15 @@
                             
                             const requiredTime = blockDef.hardness / miningPower; 
                             miningTime += delta; 
+                            if (Math.random() < 0.15) {
+                                const pPos = new THREE.Vector3(
+                                    bx + 0.15 + Math.random() * 0.7,
+                                    by + 0.15 + Math.random() * 0.7,
+                                    bz + 0.15 + Math.random() * 0.7
+                                );
+                                const color = window.getBlockColor ? window.getBlockColor(blockType) : 0x808080;
+                                window.spawnParticle(pPos, color, 0.08 + Math.random() * 0.06);
+                            }
                             let progress = Math.min(miningTime / requiredTime, 1); 
                             
                             let baseScale = new THREE.Vector3(1, 1, 1);
@@ -339,12 +544,14 @@
                             highlightBox.scale.copy(baseScale);
                             miningOverlay.scale.copy(baseScale).multiplyScalar(1.01);
                             miningOverlay.position.copy(highlightBox.position);
+                            miningOverlay.rotation.copy(highlightBox.rotation);
                             miningOverlay.visible = true;
 
                             const stage = Math.floor(progress * 9.9);
                             miningOverlay.material = destroyStages[stage];
                             if (miningTime >= requiredTime) { 
                                 let drops = false; if (blockDef.tool === 'none' || (toolDef && toolDef.toolType === blockDef.tool && toolDef.tier >= blockDef.tier)) drops = true; 
+                                if (window.spawnBlockBreakParticles) window.spawnBlockBreakParticles(bx, by, bz, blockType);
                                 setBlock(bx, by, bz, null); 
                                 if (window.awardAchievement) {
                                     if (blockType === 'stone') window.awardAchievement('stone_age');
@@ -357,26 +564,41 @@
                                 highlightBox.visible = false; miningOverlay.visible = false; highlightBox.scale.setScalar(1); 
                                 if (drops && gameMode === 1) { 
                                     const dropX = bx + 0.5; const dropY = by + 0.5; const dropZ = bz + 0.5;
-                                    if (blockType === 'stone' && Math.random() < 0.1) { spawnDroppedItem(dropX, dropY, dropZ, 'flint'); spawnDroppedItem(dropX, dropY, dropZ, 'stone'); } 
-                                    else if (blockType === 'coal_ore') spawnDroppedItem(dropX, dropY, dropZ, 'coal');
-                                    else if (blockType === 'diamond_ore') spawnDroppedItem(dropX, dropY, dropZ, 'diamond');
-                                    else if (blockType === 'bed_head' || blockType === 'bed_foot') spawnDroppedItem(dropX, dropY, dropZ, 'bed');
-                                    else if (blockType === 'door_top' || blockType === 'door_bottom' || blockType === 'door_top_open' || blockType === 'door_bottom_open') spawnDroppedItem(dropX, dropY, dropZ, 'door');
+                                    const trySpawnDrop = (t, c = 1) => {
+                                        if (!window.canUseItemType || window.canUseItemType(t)) spawnDroppedItem(dropX, dropY, dropZ, t, c);
+                                    };
+                                    if (blockType === 'stone' && Math.random() < 0.1) { trySpawnDrop('flint'); trySpawnDrop('cobblestone'); } 
+                                    else if (blockType === 'stone') trySpawnDrop('cobblestone'); 
+                                    else if (blockType === 'coal_ore') trySpawnDrop('coal');
+                                    else if (blockType === 'diamond_ore') trySpawnDrop('diamond');
+                                    else if (blockType === 'emerald_ore') { if (window.update100Enabled) trySpawnDrop('emerald'); }
+                                    else if (blockType === 'bed_head' || blockType === 'bed_foot') trySpawnDrop('bed');
+                                    else if (blockType === 'door_top' || blockType === 'door_bottom' || blockType === 'door_top_open' || blockType === 'door_bottom_open') trySpawnDrop('door');
                                     else if (blockType === 'chest') {
                                         const key = `${bx},${by},${bz}`;
-                                        if (window.chestInventories && window.chestInventories[key]) {
-                                            window.chestInventories[key].forEach(it => { if (it) spawnDroppedItem(dropX, dropY, dropZ, it.type, it.count); });
-                                            delete window.chestInventories[key];
+                                        const neighbors = [[1,0,0], [-1,0,0], [0,0,1], [0,0,-1]];
+                                        let chestKey = key;
+                                        for (const [dx, dy, dz] of neighbors) {
+                                            if (getBlock(bx + dx, by, bz + dz) === 'chest') {
+                                                const positions = [{ x: bx, y: by, z: bz }, { x: bx + dx, y: by, z: bz + dz }].sort((a, b) => (a.x - b.x) || (a.y - b.y) || (a.z - b.z));
+                                                chestKey = `large:${positions[0].x},${positions[0].y},${positions[0].z}_${positions[1].x},${positions[1].y},${positions[1].z}`;
+                                                break;
+                                            }
                                         }
-                                        spawnDroppedItem(dropX, dropY, dropZ, 'chest');
+                                        if (window.chestInventories && window.chestInventories[chestKey]) {
+                                            window.chestInventories[chestKey].forEach(it => { if (it) trySpawnDrop(it.type, it.count); });
+                                            delete window.chestInventories[chestKey];
+                                        }
+                                        trySpawnDrop('chest');
                                     }
-                                    else spawnDroppedItem(dropX, dropY, dropZ, blockType); 
+                                    else trySpawnDrop(blockType); 
                                 } 
                                 renderInventoryUI(); isMining = false; miningTime = 0; targetBlockKey = null; 
                             } 
                         } 
                     } else { targetBlockKey = key; miningTime = 0; highlightBox.scale.setScalar(1); miningOverlay.visible = false; }
                 } else { highlightBox.visible = false; highlightBox.scale.setScalar(1); targetBlockKey = null; miningTime = 0; }
+                }
             } else { highlightBox.visible = false; }
 
             Object.values(multiplayerPeers).forEach(p => {
@@ -401,8 +623,8 @@
                 if (p.anim && p.anim.punch && p.mesh.arms[0]) { p.mesh.arms[0].rotation.x = -Math.PI / 2 + Math.sin(time * 2) * 0.2; }
             });
 
-            // 核心光影黑科技：动态流动逼真水波纹偏移效果
-            if (window.shadowsEnabled && typeof materials !== 'undefined' && materials.water) {
+            // Smooth water flow animation regardless of "超强光影" setting.
+            if (typeof materials !== 'undefined' && materials.water) {
                 const elapsed = performance.now() * 0.001;
                 if (materials.water.normalMap) {
                     materials.water.normalMap.offset.x = (elapsed * 0.02) % 1.0;
@@ -412,6 +634,11 @@
                     materials.water.map.offset.x = (elapsed * 0.012) % 1.0;
                     materials.water.map.offset.y = (elapsed * 0.01) % 1.0;
                 }
+            }
+            if (typeof materials !== 'undefined' && materials.lava && materials.lava.map) {
+                const elapsed = performance.now() * 0.001;
+                materials.lava.map.offset.x = (elapsed * 0.018) % 1.0;
+                materials.lava.map.offset.y = (elapsed * 0.014) % 1.0;
             }
 
             // 执行渲染或 HDR Bloom 后处理通道渲染

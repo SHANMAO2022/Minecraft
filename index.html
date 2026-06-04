@@ -3,11 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft Split Version</title>
+    <title>Minecraft Web - 1.00.1</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 <body>
+
+    <!-- ===== BUGJUMP Studios loading screen ===== -->
+    <div id="loading-screen">
+        <img id="loading-brand" src="textures/OIP-C.webp" alt="">
+        <div id="loading-content">
+            <div id="loading-bar-bg">
+                <div id="loading-bar-fill"></div>
+            </div>
+        </div>
+    </div>
+
     <div id="crosshair"></div>
     <div id="dragged-icon"></div>
     <div id="hand-item"></div>
@@ -17,31 +28,33 @@
     <div id="debug-ui">
         <div id="fps-display" class="debug-line">FPS: 计算中...</div>
         <div id="coords-display" class="debug-line">XYZ: 0.0 / 0.0 / 0.0</div>
+        <div id="facing-display" class="debug-line">朝向: 北</div>
         <div id="biome-display" class="debug-line">Biome: Overworld</div>
         <div id="time-display" class="debug-line">离黑夜: 计算中...</div>
         <div id="gamemode-display" class="debug-line">模式: 生存 [按 T 输入指令]</div>
     </div>
 
     <div id="chat-container">
-        <div id="chat-history"></div><input type="text" id="chat-input" placeholder="输入指令 (如 /summon pig) 或聊天内容..."
-            autocomplete="off">
+        <div id="command-suggestions" style="display: none; position: absolute; bottom: 100%; left: 0; background: rgba(0, 0, 0, 0.7); border: 2px solid #555; max-height: 200px; overflow-y: auto; z-index: 100; width: 100%; color: white; padding: 5px; box-sizing: border-box; font-family: 'Minecraft', monospace; font-size: 14px;"></div>
+        <div id="chat-history"></div>
+        <input type="text" id="chat-input" placeholder="输入指令 (如 /gamemode creative) 按回车发送" autocomplete="off">
     </div>
 
     <div id="boss-bar-container">
-        <div id="boss-name">Ender Dragon</div>
+        <div id="boss-name">末影龙</div>
         <div id="boss-bar-bg">
             <div id="boss-bar-fill"></div>
         </div>
     </div>
 
-    <div id="status-bars" class="status-container" style="bottom: 105px;">
+    <div id="status-bars" class="status-container" style="bottom: calc(105px + 0.3cm);">
         <!-- 护甲单独一行，位于生命值上方 -->
         <div id="armor-bar" class="status-bar-row armor-row"></div>
         <div class="status-bar-row main-status-row">
             <!-- 左侧：生命值 -->
-            <div id="health-bar" class="status-item">❤️❤️❤️❤️❤️❤️❤️❤️❤️❤️</div>
+            <div id="health-bar" class="status-item"></div>
             <!-- 右侧：饥饿值 -->
-            <div id="hunger-bar" class="status-item">🍗🍗🍗🍗🍗🍗🍗🍗🍗🍗</div>
+            <div id="hunger-bar" class="status-item"></div>
         </div>
     </div>
 
@@ -71,21 +84,22 @@
         </div>
     </div>
 
-    <div id="inventory-ui">
-        <div id="btn-close-inventory" class="mc-button" style="display: none; position: absolute; top: 10px; right: 20px; width: 40px; height: 40px; line-height: 40px; padding: 0; text-align: center; font-weight: bold; background-color: #ff5555; z-index: 100;">X</div>
+    <div id="inventory-ui" data-container-ui="inventory">
+        <div id="btn-close-inventory" class="mc-button" style="display: none;">X</div>
         <div class="inventory-top" style="display: flex; flex-direction: row; align-items: flex-start; justify-content: center; gap: 30px;">
             <div id="armor-slots" style="display: flex; flex-direction: column; gap: 8px;">
-                <div class="slot" data-container="armor" data-index="0" title="头盔" style="background-color: rgba(255,255,255,0.05); border: 2px solid #555;"></div>
-                <div class="slot" data-container="armor" data-index="1" title="胸甲" style="background-color: rgba(255,255,255,0.05); border: 2px solid #555;"></div>
-                <div class="slot" data-container="armor" data-index="2" title="护腿" style="background-color: rgba(255,255,255,0.05); border: 2px solid #555;"></div>
-                <div class="slot" data-container="armor" data-index="3" title="靴子" style="background-color: rgba(255,255,255,0.05); border: 2px solid #555;"></div>
+                <div class="slot" data-container="armor" data-index="0" title="头盔"></div>
+                <div class="slot" data-container="armor" data-index="1" title="胸甲"></div>
+                <div class="slot" data-container="armor" data-index="2" title="护腿"></div>
+                <div class="slot" data-container="armor" data-index="3" title="靴子"></div>
             </div>
             
-            <div id="player-preview" style="width: 120px; height: 180px; background: rgba(0,0,0,0.3); border: 2px solid #555; border-radius: 4px; position: relative; display: flex; justify-content: center; align-items: center; overflow: hidden;">
+            <div id="player-preview" style="position: relative; display: flex; justify-content: center; align-items: center; overflow: hidden;">
                 <canvas id="player-preview-canvas" width="60" height="100" style="image-rendering: pixelated; width: 90px; height: 150px;"></canvas>
             </div>
 
             <div class="crafting-area" style="display: flex; align-items: center; gap: 20px;">
+                <div id="recipe-book-toggle" style="width: 32px; height: 32px; background-size: cover; background-image: url('textures/ender_eye.png'); cursor: pointer;" title="配方书"></div>
                 <div id="crafting-box">
                     <div class="inv-section-title" id="crafting-title">合成 (2x2)</div>
                     <div class="crafting-grid size-2" id="crafting-grid">
@@ -114,7 +128,7 @@
                 </div>
                 <div id="chest-box" style="display:none; flex-direction: column; gap: 5px;">
                     <div class="inv-section-title">容器存储</div>
-                    <div id="chest-grid" style="display: grid; grid-template-columns: repeat(9, 40px); gap: 4px; max-height: 200px; overflow-y: auto; padding: 4px; background: rgba(0,0,0,0.2); border: 1px solid #555;"></div>
+                    <div id="chest-grid"></div>
                 </div>
                 <div class="crafting-arrow">➜</div>
                 <div>
@@ -122,6 +136,7 @@
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <div class="slot" id="crafting-output" data-container="output" data-index="0"></div>
                         <div id="creative-toggle-btn" title="切换创造模式物品栏"></div>
+                        <div id="nether-portal-toggle-btn" title="切换下界隐藏物品栏"></div>
                     </div>
                 </div>
             </div>
@@ -130,13 +145,17 @@
             <div class="inv-section-title">背包</div>
             <div id="inventory-grid"></div>
         </div>
+        <div id="recipe-book-panel" style="display:none; position: absolute; right: 100%; top: 0; width: 220px; height: 100%; background: #c6c6c6; border: 4px solid #fff; border-right: none; border-bottom-color: #555; overflow-y: auto; box-sizing: border-box; padding: 10px; z-index: 10;">
+            <div style="text-align: center; font-weight: bold; margin-bottom: 10px; color: #333;">配方书</div>
+            <div id="recipe-list" style="display: flex; flex-direction: column; gap: 5px;"></div>
+        </div>
     </div>
 
     <div id="hotbar"></div>
 
     <div id="ui-layer">
         <div id="title-screen" style="display: flex;">
-            <div class="mc-logo">MINECRAFT<span>JAVA EDITION</span>
+            <div class="mc-logo">MINECRAFT<span>CHICKEN EDITION</span>
                 <div class="mc-splash">Vanilla!</div>
             </div>
             <div class="mc-button" id="btn-singleplayer">单人游戏</div>
@@ -146,6 +165,7 @@
                 <div class="mc-button" id="btn-options-title">选项...</div>
                 <div class="mc-button disabled" onclick="alert('网页版无法直接退出游戏窗口')">退出游戏</div>
             </div>
+            <div id="version-label">1.00.1</div>
         </div>
 
         <div id="world-select-screen">
@@ -238,6 +258,26 @@
         </div>
     </div>
 
+    <div id="trade-ui">
+        <div class="trade-title">
+            <span>村民交易</span>
+            <span id="trade-level" class="trade-level">Lv.1</span>
+        </div>
+        <div class="trade-xp-bar">
+            <div class="trade-xp-fill" id="trade-xp-fill"></div>
+        </div>
+        <div class="trade-row">
+            <div class="slot trade-slot" id="trade-cost-slot"></div>
+            <div class="trade-arrow">></div>
+            <div class="slot trade-slot" id="trade-result-slot"></div>
+        </div>
+        <div id="trade-list" class="trade-list"></div>
+        <div class="trade-player-title">背包</div>
+        <div id="trade-player-inv" class="trade-player-inv"></div>
+        <div class="mc-button trade-button" id="btn-trade-bonus" style="display:none;">交易</div>
+        <div class="mc-button trade-button" id="btn-close-trade">完成</div>
+    </div>
+
     <div id="touch-ui" style="display: none;">
         <div id="touch-pause-container">
             <button id="touch-btn-pause" class="touch-button">II</button>
@@ -263,23 +303,17 @@
         </div>
     </div>
 
-    <!-- 存档丢失风险提醒 (顶层全屏覆盖) -->
-    <div id="save-confirm-modal">
-        <div class="save-confirm-box">
-            <div style="color: #ff5555; font-size: 24px; font-weight: bold; text-shadow: 2px 2px 0 #000;">⚠️ 存档安全提醒</div>
-            <div style="color: #ddd; font-size: 16px; line-height: 1.6; text-shadow: 1px 1px 0 #000;">
-                世界已保存到浏览器。但是建议您导出存档文件 (.sv3) 到本地备份。
-                <br><br>
-                <span style="color: #ffff55;">如果浏览器清理缓存，您的进度将会永久丢失。</span>
+    <!-- 局域网开放设置已被移除，整合到了内部快速生成逻辑中 -->
+    <div id="world-create-loading">
+        <div id="world-create-panel">
+            <div id="world-create-title">生成世界中</div>
+            <canvas id="world-create-map" width="112" height="112"></canvas>
+            <div id="world-create-progress-bg">
+                <div id="world-create-progress-fill"></div>
             </div>
-            <div style="display: flex; flex-direction: column; gap: 12px;">
-                <button class="mc-button" style="width: 100%; background: #55ff55; color: #000; border-color: #000;" id="btn-modal-download">立即下载并导出 (.sv3)</button>
-                <button class="mc-button" style="width: 100%;" id="btn-modal-quit">我知道了，留在主菜单</button>
-            </div>
+            <div id="world-create-status">准备出生点...</div>
         </div>
     </div>
-
-    <!-- 局域网开放设置已被移除，整合到了内部快速生成逻辑中 -->
 
 <script type="importmap">
         {
@@ -312,7 +346,7 @@
     window.UnrealBloomPass = UnrealBloomPass;
     window.OutputPass = OutputPass;
 
-    // Load all game scripts sequentially after imports are ready
+    // ===== 加载进度驱动逻辑 =====
     const scripts = [
         'js/texture_data.js',
         'js/1_globals.js',
@@ -333,19 +367,172 @@
         'js/14_main_loop.js'
     ];
 
+    const loadingBar  = document.getElementById('loading-bar-fill');
+
     const v = Date.now();
-    for (const src of scripts) {
+    for (let i = 0; i < scripts.length; i++) {
+        const src = scripts[i];
+        const pct = Math.round(((i) / scripts.length) * 100);
+        if (loadingBar) { loadingBar.style.width = pct + '%'; }
         await new Promise((resolve, reject) => {
             const script = document.createElement('script');
             script.src = src + '?v=' + v;
             script.onload = resolve;
-            script.onerror = () => reject(new Error('Failed to load: ' + src));
+            script.onerror = () => {
+                console.error('Failed to load:', src);
+                reject(new Error('Failed to load: ' + src));
+            };
             document.body.appendChild(script);
         });
+    }
+
+    // 全部加载完毕
+    if (window.getTextureSource) {
+        const setBg = (id, tex) => {
+            const el = document.getElementById(id);
+            if (el) el.style.backgroundImage = `url("${window.getTextureSource(tex)}")`;
+        };
+        setBg('recipe-book-toggle', 'ender_eye');
+        setBg('creative-toggle-btn', 'diamond_pickaxe');
+        setBg('nether-portal-toggle-btn', 'nether_portal');
+    }
+    if (loadingBar)  { loadingBar.style.width = '100%'; }
+
+    await new Promise(r => setTimeout(r, 600));
+
+    const loadingScreen = document.getElementById('loading-screen');
+    if (loadingScreen) {
+        loadingScreen.style.opacity = '0';
+        setTimeout(() => { loadingScreen.style.display = 'none'; }, 700);
     }
 
     const titleScreen = document.getElementById('title-screen');
 
 </script>
+
+<audio id="bg-music" src="sounds/aria_math.ogg" loop preload="auto" crossorigin="anonymous"></audio>
+<script>
+    let audioCtx, source, gainNode;
+
+    function initAmplify() {
+        if (audioCtx) return;
+        const bgMusic = document.getElementById('bg-music');
+        if (!bgMusic) return;
+        try {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            source = audioCtx.createMediaElementSource(bgMusic);
+            gainNode = audioCtx.createGain();
+            gainNode.gain.value = 6.0; // Keep music clearly audible over game effects
+            source.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+        } catch(e) {}
+    }
+
+    function checkTitleMusic() {
+        const bgMusic = document.getElementById('bg-music');
+        if (!bgMusic) return;
+
+        // If game is actively playing, music should stop. 
+        // Pause menu doesn't change isPlaying, but we only want music in the main titles.
+        // We consider the menu open if isPlaying is false.
+        const playing = typeof window.isPlaying !== 'undefined' ? window.isPlaying : false;
+        const isMenuOpen = !playing;
+        
+        if (isMenuOpen) {
+            if (bgMusic.paused) {
+                bgMusic.volume = 1.0;
+                let playPromise = bgMusic.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(_ => {
+                        initAmplify();
+                        if (audioCtx && audioCtx.state === 'suspended') {
+                            audioCtx.resume();
+                        }
+                    }).catch(e => {});
+                }
+            }
+        } else {
+            if (!bgMusic.paused) {
+                bgMusic.pause();
+            }
+        }
+    }
+    
+    setInterval(checkTitleMusic, 1000);
+    document.addEventListener('click', () => {
+        checkTitleMusic();
+        if (audioCtx && audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+    });
+</script>
+
+<audio id="in-game-music" preload="none" crossorigin="anonymous" loop></audio>
+<script>
+    let inGameSource, inGameGain;
+    let inGameMusicTimer = null;
+    let playingInGameMusic = false;
+
+    function initInGameAmplify() {
+        if (!audioCtx) {
+            try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) { return; }
+        }
+        if (!inGameSource) {
+            try {
+                const inGameMusic = document.getElementById('in-game-music');
+                inGameSource = audioCtx.createMediaElementSource(inGameMusic);
+                inGameGain = audioCtx.createGain();
+                inGameGain.gain.value = 6.0; // Keep music clearly audible over game effects
+                inGameSource.connect(inGameGain);
+                inGameGain.connect(audioCtx.destination);
+            } catch(e) {}
+        }
+    }
+
+    function checkInGameMusic() {
+        const inGameMusic = document.getElementById('in-game-music');
+        if (!inGameMusic) return;
+
+        const playing = typeof window.isPlaying !== 'undefined' ? window.isPlaying : false;
+        const currentDim = typeof window.currentDimension !== 'undefined' ? window.currentDimension : 'overworld';
+
+        if (!playing) {
+            if (!inGameMusic.paused) {
+                inGameMusic.pause();
+            }
+            playingInGameMusic = false;
+            return;
+        }
+
+        const expectedSrc = currentDim === 'nether' ? 'sounds/pigstep.ogg' : 'sounds/sweden.ogg';
+        
+        if (!inGameMusic.src.endsWith(expectedSrc)) {
+            inGameMusic.src = expectedSrc;
+            inGameMusic.volume = 1.0;
+            let p = inGameMusic.play();
+            if (p !== undefined) {
+                p.then(() => {
+                    playingInGameMusic = true;
+                    initInGameAmplify();
+                    if (audioCtx && audioCtx.state === 'suspended') {
+                        audioCtx.resume();
+                    }
+                }).catch(() => {
+                    playingInGameMusic = false;
+                });
+            }
+        } else if (inGameMusic.paused) {
+            inGameMusic.play().catch(() => {});
+            playingInGameMusic = true;
+        }
+    }
+
+    document.getElementById('in-game-music').addEventListener('ended', () => {
+        playingInGameMusic = false;
+    });
+
+    setInterval(checkInGameMusic, 1000);
+</script>
+
 </body>
 </html>
